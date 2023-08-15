@@ -1,0 +1,19 @@
+[profile.default]
+src = 'contracts'
+out = 'out'
+solc_version = '0.8.19'
+optimizer_runs = 1000000
+via_ir = false
+libs = ['node_modules', 'lib']
+test = 'test'
+cache_path  = 'foundry-cache'
+gas_reports = ["BaseChainPortal", "CrossChainPortal"]
+bytecode_hash = "none"
+ffi = false
+
+[fuzz]
+runs = 256 #1000000 
+
+[invariant]
+runs = 128 #100000
+depth = 16
