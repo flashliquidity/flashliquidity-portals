@@ -4,7 +4,7 @@ FlashLiquidity cross-chain interoperability and governance executors contracts
 
 ## Install Dependencies
 
-`yarn`
+`yarn setup`
 
 ## Compile Contracts
 

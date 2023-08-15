@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "license": "MIT",
   "scripts": {
-    "setup-forge": "forge install foundry-rs/forge-std@v1.6.0",
+    "setup": "yarn && forge install foundry-rs/forge-std@v1.6.0",
     "compile": "forge build",
     "test": "forge test",
     "unit-test": "forge test --nmt 'testFuzz|invariant'",
