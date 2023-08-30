@@ -93,7 +93,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     mapping(uint64 destChainSelector => address portal) internal s_chainPortal;
     /// @dev Nested mapping of authorized communication lanes (sender -> chainSelector -> target)
     mapping(address sender => mapping(uint64 destChainSelector => mapping(address target => bool))) private s_lanes;
-    
+
     ///////////////////////
     // Events            //
     ///////////////////////

@@ -4,4 +4,4 @@
 flashliquidity-acs/=node_modules/flashliquidity-acs
 hardhat-deploy/=node_modules/hardhat-deploy/
 hardhat/=node_modules/hardhat/
-forge-std/=foundry-lib/forge-std/src/
+forge-std/=lib/forge-std/src/

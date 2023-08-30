@@ -4,6 +4,7 @@
   "license": "MIT",
   "repository": "https://github.com/flashliquidity/flashliquidity-portals.git",
   "scripts": {
+    "setup": "yarn && forge install",
     "compile": "forge build",
     "test": "forge test",
     "unit-test": "forge test --nmt 'testFuzz|invariant'",

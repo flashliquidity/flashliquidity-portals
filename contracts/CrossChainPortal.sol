@@ -6,7 +6,6 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {CrossChainGovernable} from "flashliquidity-acs/contracts/CrossChainGovernable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {ChainPortal} from "./ChainPortal.sol";
-import {ICrossChainPortal} from "./interfaces/ICrossChainPortal.sol";
 
 /**
  * @title CrossChainPortal
