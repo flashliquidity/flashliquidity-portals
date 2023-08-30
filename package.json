@@ -1,25 +1,27 @@
 {
   "name": "flashliquidity-portals",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
+  "repository": "https://github.com/flashliquidity/flashliquidity-portals.git",
   "scripts": {
-    "setup": "yarn && forge install foundry-rs/forge-std@v1.6.0 --no-commit",
     "compile": "forge build",
     "test": "forge test",
     "unit-test": "forge test --nmt 'testFuzz|invariant'",
     "fuzz-test": "forge test --mt testFuzz",
     "invariant-test": "forge test --mt invariant",
     "coverage": "forge coverage",
+    "gas-report": "forge snapshot --gas-report",
     "slither": "slither .",
     "lint": "solhint 'contracts/*.sol'",
-    "lint:fix": "solhint 'contracts/**/*.sol' --fix",
-    "prettier": "forge fmt contracts/**/*.sol && forge fmt test/**/*.sol && prettier --write 'scripts/**/*.ts'",
-    "prettier-check": "forge fmt --check && prettier --check 'scripts/**/*.ts'"
+    "lint-fix": "solhint 'contracts/**/*.sol' --fix",
+    "format": "forge fmt contracts/*.sol && forge fmt contracts/**/*.sol && forge fmt test/foundry-test/**/*.sol",
+    "format-check": "forge fmt --check"
   },
   "dependencies": {
     "@chainlink/contracts": "^0.6.1",
     "@chainlink/contracts-ccip": "^0.7.6",
-    "@openzeppelin/contracts": "4.9.3"
+    "@openzeppelin/contracts": "4.9.3",
+    "flashliquidity-acs": "0.0.4"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",

@@ -1703,6 +1703,11 @@ find-up@^2.1.0:
   dependencies:
     locate-path "^2.0.0"
 
+flashliquidity-acs@0.0.4:
+  version "0.0.4"
+  resolved "https://registry.yarnpkg.com/flashliquidity-acs/-/flashliquidity-acs-0.0.4.tgz#9a157de72dfc777a3c2d9772861b0c67fb42c594"
+  integrity sha512-lbInPVWXqvJsiHDSl97WbsT+X/2beR0812gVFYeK8jro36pDvBMKWCsvKulIGsF6j+E3eBn9qQL1HFUVE/vr2g==
+
 flat@^5.0.2:
   version "5.0.2"
   resolved "https://registry.yarnpkg.com/flat/-/flat-5.0.2.tgz#8ca6fe332069ffa9d324c327198c598259ceb241"

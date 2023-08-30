@@ -2,6 +2,10 @@
 
 FlashLiquidity cross-chain interoperability and governance executors contracts
 
+## Requirements
+
+- [foundry](https://book.getfoundry.sh/getting-started/installation)
+
 ## Install Dependencies
 
 `yarn setup`
@@ -29,6 +33,10 @@ FlashLiquidity cross-chain interoperability and governance executors contracts
 ## Run Coverage
 
 `yarn coverage`
+
+## Gas Report
+
+`yarn gas-report`
 
 ## Run Slither
 

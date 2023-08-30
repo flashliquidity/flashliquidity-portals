@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import {IChainPortal} from "./interfaces/IChainPortal.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,23 +14,22 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 /**
  * @title ChainPortal
  * @author Oddcod3 (@oddcod3)
- * 
+ *
  * @dev This abstract contract contains the core logic for a generic chain portal.
  * @dev The ChainPortal empowers cross-chain communication and token bridging between
  *      different portals deployed across multiple EVM chains.
- * 
+ *
  * @notice Functionalities:
- * - send cross-chain actions to be executed by the portal on the destination chain
- * - receive and execute cross-chain actions sent from other portals deployed across chains 
+ * - send cross-chain actions to be executed by the receivier portal on the destination chain
+ * - receive and execute cross-chain actions sent from other authorized portals deployed across different chains
  * - bridge allowed tokens to a receving portal on destination chain
- * - combine cross-chain actions and token bridging in a single message 
+ * - combine cross-chain actions and token bridging in a single message
  *
  * @dev This contract is the base class inherited from BaseChainPortal and CrossChainPortal.
  */
-abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
-
+abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibleInterface {
     using SafeERC20 for IERC20;
-    
+
     ///////////////////////
     // Errors            //
     ///////////////////////
@@ -68,7 +68,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         uint64 nextActionId;
         uint64 lastActionId;
         uint64 executionDelay;
-        uint64 lastTimePendingActionExecuted;    
+        uint64 lastTimePendingActionExecuted;
     }
 
     enum ActionState {
@@ -93,7 +93,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     mapping(uint64 destChainSelector => address portal) internal s_chainPortal;
     /// @dev Nested mapping of authorized communication lanes (sender -> chainSelector -> target)
     mapping(address sender => mapping(uint64 destChainSelector => mapping(address target => bool))) private s_lanes;
-
+    
     ///////////////////////
     // Events            //
     ///////////////////////
@@ -105,10 +105,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     event QueuedActionExecuted(uint256 indexed actionId);
     event InboundActionExecuted(bytes32 indexed messageId);
     event LanesChanged(
-        address[] indexed senders,
-        address[] indexed targets,
-        uint64[] indexed chainSelectors,
-        bool[] isEnabled
+        address[] indexed senders, address[] indexed targets, uint64[] indexed chainSelectors, bool[] isEnabled
     );
     event ChainPortalsChanged(uint64[] indexed chainSelectors, address[] indexed portals);
 
@@ -136,16 +133,16 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     // External Functions //
     ////////////////////////
 
-    // @inheritdoc IChainPortal
+    /// @inheritdoc IChainPortal
     function abortAction(uint64 actionId) external virtual;
 
-    // @inheritdoc IChainPortal
+    /// @inheritdoc IChainPortal
     function setExecutionDelay(uint64 executionDelay) external virtual;
 
-    // @inheritdoc IChainPortal
+    /// @inheritdoc IChainPortal
     function setChainPortals(uint64[] calldata chainSelectors, address[] calldata portals) external virtual;
 
-    // @inheritdoc IChainPortal
+    /// @inheritdoc IChainPortal
     function setLanes(
         address[] calldata senders,
         uint64[] calldata destChainSelectors,
@@ -153,19 +150,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         bool[] calldata enableds
     ) external virtual;
 
-    /**
-     * @dev Sends a cross-chain action and/or bridges tokens to another portal on destination chain.
-     * @param chainSelector: Chain selector of the destination chain
-     * @param gasLimit: Gas limit for execution of the action on destination chain
-     * @param targets: Array of target addresses to interact with
-     * @param values: Array of values of native destination token to send to target addresses
-     * @param signatures: Array of function signatures to be called for target addresses
-     * @param calldatas: Array of calldatas for low level calls to target addresses
-     * @param tokens: Array of tokens to be bridged to the destination chain
-     * @param amounts: Array of token amounts to be bridged to destination chain
-     * @notice Tokens are bridged to the destination portal address
-     * @notice Approvals to this portal of token amounts to be bridged is required before calling this function
-     */
+    /// @inheritdoc IChainPortal
     function teleport(
         uint64 chainSelector,
         uint64 gasLimit,
@@ -179,10 +164,8 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         if (
             targets.length != values.length || values.length != signatures.length
                 || signatures.length != calldatas.length || tokens.length != amounts.length
-        ) {
-            revert ChainPortal__ArrayLengthMismatch();
-        }
-        if(targets.length == 0) {
+        ) revert ChainPortal__ArrayLengthMismatch();
+        if (targets.length == 0) {
             revert ChainPortal__ZeroTargets();
         }
         address chainPortal = s_chainPortal[chainSelector];
@@ -190,13 +173,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
             revert ChainPortal__InvalidChain(chainSelector);
         }
         Client.EVM2AnyMessage memory message = _buildMessage(
-            gasLimit, 
-            chainPortal, 
-            targets, 
-            values, 
-            signatures, 
-            calldatas, 
-            _handleTokensBridging(tokens, amounts)
+            gasLimit, chainPortal, targets, values, signatures, calldatas, _handleTokensBridging(tokens, amounts)
         );
         bytes32 _messageId = IRouterClient(i_router).ccipSend(chainSelector, message);
         emit OutboundActionSent(_messageId);
@@ -215,10 +192,10 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     ////////////////////////
 
     /**
-     * @notice This function is used by the CCIP router to deliver a message.
+     * @notice This function is used by the Chainlink CCIP router to deliver a message.
      * @notice If the execution delay is 0, this function immediately executes the received action.
      * @param message The Any2EVMMessage struct received from CCIP, containing a cross-chain action to be executed.
-     */ 
+     */
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
         address sender = abi.decode(message.sender, (address));
         address sourceChainPortal = s_chainPortal[message.sourceChainSelector];
@@ -230,11 +207,12 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         }
         ActionQueueState storage queueState = s_queueState;
         CrossChainAction memory action = abi.decode(message.data, (CrossChainAction));
-        if(queueState.executionDelay > 0) {
+        if (queueState.executionDelay > 0) {
             uint64 lastActionId = queueState.lastActionId;
             queueState.lastActionId = lastActionId + 1;
             s_actions[lastActionId] = action;
-            s_actionInfo[lastActionId] = ActionInfo(uint64(block.timestamp), message.sourceChainSelector, ActionState.PENDING);
+            s_actionInfo[lastActionId] =
+                ActionInfo(uint64(block.timestamp), message.sourceChainSelector, ActionState.PENDING);
             emit InboundActionQueued(lastActionId, message.messageId);
         } else {
             _executeAction(message.sourceChainSelector, action);
@@ -252,22 +230,21 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     function _executeNextPendingActionQueued() internal {
         uint64 nextActionId = s_queueState.nextActionId;
         ActionInfo storage actionInfo = s_actionInfo[nextActionId];
-        while(actionInfo.actionState == ActionState.ABORTED) {
+        while (actionInfo.actionState == ActionState.ABORTED) {
             nextActionId += 1;
             actionInfo = s_actionInfo[nextActionId];
         }
-        if(actionInfo.actionState == ActionState.EMPTY || actionInfo.actionState == ActionState.EXECUTED) {
+        if (actionInfo.actionState == ActionState.EMPTY) {
             revert ChainPortal__NoActionQueued();
         }
         actionInfo.actionState = ActionState.EXECUTED;
         s_queueState.nextActionId = nextActionId + 1;
         s_queueState.lastTimePendingActionExecuted = uint64(block.timestamp);
-        if (_isActionExecutable(actionInfo.timestampQueued)) {
-            _executeAction(actionInfo.sourceChainSelector, s_actions[nextActionId]);
-            emit QueuedActionExecuted(nextActionId);
-        } else {
+        if (!_isActionExecutable(actionInfo.timestampQueued)) {
             revert ChainPortal__ActionNotExecutable();
         }
+        _executeAction(actionInfo.sourceChainSelector, s_actions[nextActionId]);
+        emit QueuedActionExecuted(nextActionId);
     }
 
     /**
@@ -281,7 +258,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         bytes memory resultData;
         _verifyActionRestrictions(action.sender, action.targets, sourceChainSelector);
         for (uint256 i; i < action.targets.length;) {
-            if(bytes(action.signatures[i]).length == 0) {
+            if (bytes(action.signatures[i]).length == 0) {
                 callData = action.calldatas[i];
             } else {
                 callData = abi.encodePacked(bytes4(keccak256(bytes(action.signatures[i]))), action.calldatas[i]);
@@ -304,7 +281,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     }
 
     /**
-     * @param actionId: ID of the action to be aborted 
+     * @param actionId: ID of the action to be aborted
      */
     function _abortAction(uint64 actionId) internal {
         ActionQueueState memory queueState = s_queueState;
@@ -337,7 +314,7 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
             revert ChainPortal__ArrayLengthMismatch();
         }
         for (uint256 i; i < chainSelectors.length;) {
-            if(!IRouterClient(i_router).isChainSupported(chainSelectors[i])){
+            if (!IRouterClient(i_router).isChainSupported(chainSelectors[i])) {
                 revert IRouterClient.UnsupportedDestinationChain(chainSelectors[i]);
             }
             s_chainPortal[chainSelectors[i]] = portals[i];
@@ -348,7 +325,14 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         emit ChainPortalsChanged(chainSelectors, portals);
     }
 
-    // @inheritdoc IChainPortal
+    /**
+     * @param senders Array of sender addresses.
+     * @param destChainSelectors Array of destination chain selectors.
+     * @param targets Array of target addresses.
+     * @param enableds Array of boolean values to enable/disable a lane for every: senders[i] -> destChainSelectors[i] -> targets[i].
+     * @notice This function is used to enable/disable lanes between senders and targets on destination chains.
+     * @notice The senders, targets, destChainSelectors, and enableds arrays must have the same length.
+     */
     function _setLanes(
         address[] calldata senders,
         uint64[] calldata destChainSelectors,
@@ -356,14 +340,13 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         bool[] calldata enableds
     ) internal {
         if (
-            senders.length != targets.length || 
-            targets.length != destChainSelectors.length || 
-            destChainSelectors.length != enableds.length
+            senders.length != targets.length || targets.length != destChainSelectors.length
+                || destChainSelectors.length != enableds.length
         ) {
             revert ChainPortal__ArrayLengthMismatch();
         }
         for (uint256 i; i < senders.length;) {
-            if(targets[i] == address(0)) {
+            if (targets[i] == address(0)) {
                 revert ChainPortal__ZeroAddressTarget();
             }
             s_lanes[senders[i]][destChainSelectors[i]][targets[i]] = enableds[i];
@@ -383,10 +366,10 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
      * @param amounts Array of token amounts to be bridged.
      * @notice Transfer tokens from msg.sender to this portal and approve tokens to CCIP router.
      */
-    function _handleTokensBridging(
-        address[] memory tokens, 
-        uint256[] memory amounts
-    ) private returns(Client.EVMTokenAmount[] memory) {
+    function _handleTokensBridging(address[] memory tokens, uint256[] memory amounts)
+        private
+        returns (Client.EVMTokenAmount[] memory)
+    {
         IERC20 token;
         Client.EVMTokenAmount[] memory tokensData = new Client.EVMTokenAmount[](tokens.length);
         for (uint256 i; i < tokens.length;) {
@@ -480,13 +463,13 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
      */
     function _revertIfNotAuthorizedLanes(uint64 chainSelector, address[] memory targets) private view {
         address tempTarget;
-        for (uint256 i; i < targets.length;i++) {
-            if(targets[i] != tempTarget) {
-                if (!s_lanes[msg.sender][chainSelector][targets[i]]) {
+        for (uint256 i; i < targets.length; i++) {
+            if (targets[i] != tempTarget) {
+                tempTarget = targets[i];
+                if (!s_lanes[msg.sender][chainSelector][tempTarget]) {
                     revert ChainPortal__LaneNotAvailable();
                 }
             }
-            tempTarget = targets[i];
             unchecked {
                 ++i;
             }
@@ -497,13 +480,12 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
     // External View Functions //
     /////////////////////////////
 
-    // @inheritdoc IChainPortal
-    function getActionQueueState() external view returns(
-        uint64 nextActionId,
-        uint64 lastActionId,
-        uint64 executionDelay,
-        uint64 lastTimePendingActionExecuted
-    ) {
+    /// @inheritdoc IChainPortal
+    function getActionQueueState()
+        external
+        view
+        returns (uint64 nextActionId, uint64 lastActionId, uint64 executionDelay, uint64 lastTimePendingActionExecuted)
+    {
         ActionQueueState memory queueState = s_queueState;
         nextActionId = queueState.nextActionId;
         lastActionId = queueState.lastActionId;
@@ -511,14 +493,18 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         lastTimePendingActionExecuted = queueState.lastTimePendingActionExecuted;
     }
 
-    // @inheritdoc IChainPortal
-    function getActionById(uint64 actionId) external view returns (
-        address sender,
-        address[] memory targets,
-        uint256[] memory values,
-        string[] memory signatures,
-        bytes[] memory calldatas
-    ) {
+    /// @inheritdoc IChainPortal
+    function getActionById(uint64 actionId)
+        external
+        view
+        returns (
+            address sender,
+            address[] memory targets,
+            uint256[] memory values,
+            string[] memory signatures,
+            bytes[] memory calldatas
+        )
+    {
         CrossChainAction memory action = _getActionById(actionId);
         sender = action.sender;
         targets = action.targets;
@@ -527,27 +513,27 @@ abstract contract ChainPortal is CCIPReceiver, AutomationCompatibleInterface {
         calldatas = action.calldatas;
     }
 
-    // @inheritdoc IChainPortal
-    function getActionInfoById(uint64 actionId) external view returns (
-        uint64 timestampQueued,
-        uint64 fromChainSelector,
-        uint8 actionState
-    ) {
+    /// @inheritdoc IChainPortal
+    function getActionInfoById(uint64 actionId)
+        external
+        view
+        returns (uint64 timestampQueued, uint64 fromChainSelector, uint8 actionState)
+    {
         ActionInfo memory actionInfo = _getActionStateById(actionId);
         timestampQueued = actionInfo.timestampQueued;
         fromChainSelector = actionInfo.sourceChainSelector;
         actionState = uint8(actionInfo.actionState);
     }
 
-    // @inheritdoc IChainPortal
+    /// @inheritdoc IChainPortal
     function isAuthorizedLane(address sender, uint64 destChainSelector, address target) external view returns (bool) {
         return s_lanes[sender][destChainSelector][target];
     }
 
-    // @inheritdoc IChainPortal
+    /// @inheritdoc IChainPortal
     function getPortal(uint64 chainSelector) external view returns (address portal) {
         return s_chainPortal[chainSelector];
-    } 
+    }
 
     /**
      * @inheritdoc AutomationCompatibleInterface

@@ -11,6 +11,10 @@ coverage
 coverage.json
 typechain
 
+#foundry
+foundry-cache
+out
+
 # don't push the environment vars!
 .env
 

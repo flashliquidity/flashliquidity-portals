@@ -7,9 +7,9 @@ import {Vm} from "forge-std/Vm.sol";
 import {CrossChainPortal} from "../../../contracts/CrossChainPortal.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
 import {ChainPortal} from "../../../contracts/ChainPortal.sol";
-import {CrossChainGovernable} from "../../../contracts/types/CrossChainGovernable.sol";
-import {Governable} from "../../../contracts/types/Governable.sol";
-import {Guardable} from "../../../contracts/types/Guardable.sol";
+import {CrossChainGovernable} from "flashliquidity-acs/contracts/CrossChainGovernable.sol";
+import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
+import {Guardable} from "flashliquidity-acs/contracts//Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
 import {ERC20Mock} from "../../mocks/ERC20Mock.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -285,7 +285,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -302,7 +302,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__ZeroChainId.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__ZeroChainSelector.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -326,7 +326,10 @@ contract CrossChainPortalTest is Test {
 
     function testExecuteActionGovernanceTransfer() public {
         assertTrue(crossChainPortal.getPendingGovernor() == address(0));
+        vm.expectRevert(Guardable.Guardable__NotGuardian.selector);
+        crossChainPortal.transferGovernance();
         vm.expectRevert(CrossChainGovernable.CrossChainGovernable__ZeroAddress.selector);
+        vm.prank(guardian);
         crossChainPortal.transferGovernance();
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             governor,
@@ -342,8 +345,10 @@ contract CrossChainPortalTest is Test {
         vm.warp(block.timestamp + executionDelay + 1);
         crossChainPortal.performUpkeep(new bytes(0));
         vm.expectRevert(CrossChainGovernable.CrossChainGovernable__TooEarly.selector);
+        vm.prank(guardian);
         crossChainPortal.transferGovernance();
         vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(guardian);
         crossChainPortal.transferGovernance();
     }
 
@@ -360,7 +365,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -377,7 +382,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -394,7 +399,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -411,7 +416,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -428,7 +433,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -445,7 +450,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotFromBaseChainGovernor.selector);
+        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
@@ -487,7 +492,7 @@ contract CrossChainPortalTest is Test {
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.prank(guardian);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__CommunicationNotLost.selector);
+        vm.expectRevert(CrossChainPortal.CrossChainPortal__CommunicationNotLost.selector);
         crossChainPortal.emergencyCommunicationLost(message);
         vm.warp(block.timestamp + executionDelay + 1 + crossChainPortal.getIntervalCommunicationLost() + 1);
         vm.prank(guardian);

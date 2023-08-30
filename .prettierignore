@@ -1,6 +1,9 @@
 node_modules
 artifacts
 cache
+out
+foundry-lib
+foundry-cache
 coverage*
 gasReporterOutput.json
 package.json

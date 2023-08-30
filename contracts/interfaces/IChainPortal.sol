@@ -26,7 +26,7 @@ interface IChainPortal {
      * @param targets Array of target addresses.
      * @param enableds Array of boolean values to enable/disable a lane for every: senders[i] -> destChainSelectors[i] -> targets[i].
      * @notice This function is used to enable/disable lanes between senders and targets on destination chains.
-     * @notice The senders, targets, destChainSelectors, and enableds arrays must have the same length.
+     * @notice This function revert if the senders, targets, destChainSelectors, and enableds arrays don't have the same length.
      */
     function setLanes(
         address[] calldata senders,
@@ -36,16 +36,17 @@ interface IChainPortal {
     ) external;
 
     /**
-     * @param chainSelector Chain selector of the destination chain.
-     * @param gasLimit Gas limit for execution of the action on the destination chain.
-     * @param targets Array of target addresses to interact with.
-     * @param values Array of values of native destination token to send to target addresses.
-     * @param signatures Array of function signatures to be called for target addresses.
-     * @param calldatas Array of calldatas for low-level calls to target addresses.
-     * @param tokens Array of tokens to be bridged to the destination chain.
-     * @param amounts Array of token amounts to be bridged to the destination chain.
-     * @notice Tokens are bridged to the destination portal address.
-     * @notice Approvals to this portal of token amounts to be bridged are required before calling this function.
+     * @dev Sends a cross-chain action and/or bridges tokens to another portal on destination chain.
+     * @param chainSelector Chain selector of the destination chain
+     * @param gasLimit Gas limit for execution of the action on destination chain
+     * @param targets Array of target addresses to interact with
+     * @param values Array of values of native destination token to send to target addresses
+     * @param signatures Array of function signatures to be called for target addresses
+     * @param calldatas Array of calldatas for low level calls to target addresses
+     * @param tokens Array of tokens to be bridged to the destination chain
+     * @param amounts Array of token amounts to be bridged to destination chain
+     * @notice Tokens are bridged to the destination portal address
+     * @notice Approvals to this portal of token amounts to be bridged is required before calling this function
      */
     function teleport(
         uint64 chainSelector,
@@ -57,10 +58,6 @@ interface IChainPortal {
         address[] memory tokens,
         uint256[] memory amounts
     ) external;
-
-    /////////////////////////////
-    // External View Functions //
-    /////////////////////////////
 
     /**
      * @notice This function returns the action queue state.

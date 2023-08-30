@@ -6,8 +6,8 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
 import {ChainPortal} from "../../../contracts/ChainPortal.sol";
-import {Governable} from "../../../contracts/types/Governable.sol";
-import {Guardable} from "../../../contracts/types/Guardable.sol";
+import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
+import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
 import {ERC20Mock} from "../../mocks/ERC20Mock.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -80,13 +80,7 @@ contract ChainPortalTest is Test {
         vm.prank(governor);
         portal.setChainPortals(chainSelectors, portals);
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            cc_portal,
-            crossChainSelector,
-            address(linkToken),
-            0,
-            "approve(address,uint256)",
-            abi.encode(bob, 100)
+            bob, cc_portal, crossChainSelector, address(linkToken), 0, "approve(address,uint256)", abi.encode(bob, 100)
         );
         vm.prank(address(ccipRouter));
         portal.ccipReceive(message);
@@ -109,7 +103,7 @@ contract ChainPortalTest is Test {
         (,, uint8 nextActionState) = portal.getActionInfoById(nextActionId);
         if (lastActionId == 0 || lastActionId == nextActionId) {
             assertTrue(nextActionState == 0);
-        } else if(lastActionId == nextActionId) {
+        } else if (lastActionId == nextActionId) {
             assertTrue(nextActionState == 1 || nextActionState == 4);
         }
         assertTrue(lastActionState == 0);
