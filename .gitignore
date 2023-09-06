@@ -104,8 +104,6 @@ lint/outputs/
 lint/tmp/
 # lint/reports/
 
-gas-report.txt
-.gas-snapshot
 .openzeppelin
 .notes.md
 .article.md

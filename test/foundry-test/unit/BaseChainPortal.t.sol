@@ -5,7 +5,7 @@ pragma solidity 0.8.19;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
-import {ChainPortal} from "../../../contracts/ChainPortal.sol";
+import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
@@ -49,8 +49,8 @@ contract BaseChainPortalTest is Test {
         signatures[0] = signature;
         calldatas[0] = callData;
         values[0] = value;
-        ChainPortal.CrossChainAction memory action =
-            ChainPortal.CrossChainAction(sender, targets, values, signatures, calldatas);
+        DataTypes.CrossChainAction memory action =
+            DataTypes.CrossChainAction(sender, targets, values, signatures, calldatas);
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), sourceChainSelector, abi.encode(senderPortal), abi.encode(action), tokenAmounts
@@ -75,19 +75,19 @@ contract BaseChainPortalTest is Test {
         );
     }
 
-    function testSetExecutionDelay() public {
-        (,, uint64 currentExecutionDelay,) = portal.getActionQueueState();
+    function test__SetExecutionDelay() public {
+        (,, uint64 currentExecutionDelay) = portal.getActionQueueState();
         assertEq(currentExecutionDelay, executionDelay);
         uint64 newExecutionDelay = 30;
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
         portal.setExecutionDelay(newExecutionDelay);
         vm.prank(governor);
         portal.setExecutionDelay(newExecutionDelay);
-        (,, currentExecutionDelay,) = portal.getActionQueueState();
+        (,, currentExecutionDelay) = portal.getActionQueueState();
         assertEq(currentExecutionDelay, newExecutionDelay);
     }
 
-    function testSetGuardians() public {
+    function test__SetGuardians() public {
         address[] memory targets = new address[](1);
         bool[] memory enableds = new bool[](1);
         targets[0] = guardian;
@@ -103,7 +103,7 @@ contract BaseChainPortalTest is Test {
         assertFalse(portal.isGuardian(guardian));
     }
 
-    function testSetPortals() public {
+    function test__SetPortals() public {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = baseChainSelector;
@@ -123,7 +123,7 @@ contract BaseChainPortalTest is Test {
         vm.stopPrank();
     }
 
-    function testSetLanes() public {
+    function test__SetLanes() public {
         address[] memory senders = new address[](1);
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory targets = new address[](1);
@@ -144,7 +144,7 @@ contract BaseChainPortalTest is Test {
         vm.stopPrank();
     }
 
-    function testTeleport() public {
+    function test__Teleport() public {
         vm.expectRevert(ChainPortal.ChainPortal__ZeroTargets.selector);
         portal.teleport(
             baseChainSelector,
@@ -218,9 +218,10 @@ contract BaseChainPortalTest is Test {
         vm.stopPrank();
     }
 
-    function testCcipReceive() public {
-        ChainPortal.CrossChainAction memory action =
-            ChainPortal.CrossChainAction(governor, new address[](0), new uint256[](0), new string[](0), new bytes[](0));
+    function test__CcipReceive() public {
+        DataTypes.CrossChainAction memory action = DataTypes.CrossChainAction(
+            governor, new address[](0), new uint256[](0), new string[](0), new bytes[](0)
+        );
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), baseChainSelector, abi.encode(address(cc_portal)), abi.encode(action), tokenAmounts
@@ -241,7 +242,7 @@ contract BaseChainPortalTest is Test {
         portal.ccipReceive(message);
     }
 
-    function testAbortAction() public {
+    function test__AbortAction() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
@@ -271,7 +272,7 @@ contract BaseChainPortalTest is Test {
         portal.performUpkeep(new bytes(0));
     }
 
-    function testExecuteActionSingleTarget() public {
+    function test__ExecuteActionSingleTarget() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
@@ -279,8 +280,8 @@ contract BaseChainPortalTest is Test {
             crossChainSelector,
             address(linkToken),
             0,
-            "approve(address,uint256)",
-            abi.encode(bob, approveAmountBob)
+            "",
+            abi.encodeWithSignature("approve(address,uint256)", bob, approveAmountBob)
         );
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
@@ -300,7 +301,7 @@ contract BaseChainPortalTest is Test {
         assertEq(allowanceBob, approveAmountBob);
     }
 
-    function testExecuteActionMultipleTarget() public {
+    function test__ExecuteActionMultipleTarget() public {
         (uint256 approveAmountBob, uint256 approveAmountRob) = (1000, 2000);
         address[] memory targets = new address[](2);
         uint256[] memory values = new uint256[](2);
@@ -310,8 +311,8 @@ contract BaseChainPortalTest is Test {
         (signatures[0], signatures[1]) = ("approve(address,uint256)", "approve(address,uint256)");
         (calldatas[0], calldatas[1]) = (abi.encode(bob, approveAmountBob), abi.encode(rob, approveAmountRob));
         (values[0], values[1]) = (0, 0);
-        ChainPortal.CrossChainAction memory action =
-            ChainPortal.CrossChainAction(governor, targets, values, signatures, calldatas);
+        DataTypes.CrossChainAction memory action =
+            DataTypes.CrossChainAction(governor, targets, values, signatures, calldatas);
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), crossChainSelector, abi.encode(cc_portal), abi.encode(action), tokenAmounts
@@ -338,9 +339,16 @@ contract BaseChainPortalTest is Test {
         assertEq(allowanceRob, approveAmountRob);
     }
 
-    function testExecuteActionRevertIfTargetIsBaseChainPortal() public {
+    function test__RevertOnActionExecution() public {
+        uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob, cc_portal, crossChainSelector, address(portal), 0, "performUpkeep(bytes)", abi.encode(new bytes(0))
+            bob,
+            cc_portal,
+            crossChainSelector,
+            address(linkToken),
+            0,
+            "based(address,uint256)",
+            abi.encode(bob, approveAmountBob)
         );
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
@@ -350,12 +358,16 @@ contract BaseChainPortalTest is Test {
         portal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
         portal.ccipReceive(message);
+        vm.expectRevert(ChainPortal.ChainPortal__ActionNotExecutable.selector);
+        portal.performUpkeep(new bytes(0));
+        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(BaseChainPortal.BaseChainPortal__SelfCallNotAuthorized.selector);
+        vm.expectRevert(ChainPortal.ChainPortal__ActionExecutionFailed.selector);
         portal.performUpkeep(new bytes(0));
     }
 
-    function testSkipAbortedActionAndExecute() public {
+    function test__SkipAbortedActionAndExecute() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
@@ -391,7 +403,7 @@ contract BaseChainPortalTest is Test {
         portal.performUpkeep(new bytes(0));
     }
 
-    function testExecuteActionSkipAbortedAndRevertOnEmpty() public {
+    function test__ExecuteActionSkipAbortedAndRevertOnEmpty() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
@@ -425,7 +437,7 @@ contract BaseChainPortalTest is Test {
         portal.performUpkeep(new bytes(0));
     }
 
-    function testExecuteActionSkipAbortedAndExecute() public {
+    function test__ExecuteActionSkipAbortedAndExecute() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
@@ -463,7 +475,7 @@ contract BaseChainPortalTest is Test {
         portal.performUpkeep(new bytes(0));
     }
 
-    function zeroExecutionDelay() public {
+    function test__ZeroExecutionDelay() public {
         vm.prank(governor);
         portal.setExecutionDelay(0);
         uint256 approveAmountBob = 1000;

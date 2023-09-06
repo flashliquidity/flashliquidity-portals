@@ -4,7 +4,7 @@ pragma solidity 0.8.19;
 
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
-import {ChainPortal} from "./ChainPortal.sol";
+import {ChainPortal, Client, DataTypes} from "./ChainPortal.sol";
 
 /**
  * @title BaseChainPortal
@@ -15,7 +15,6 @@ import {ChainPortal} from "./ChainPortal.sol";
  * @notice This contract is used to communicate with other CrossChainPortals.
  * @notice The FlashLiquidity governor can use this contract to govern CrossChainPortals.
  * @notice The FlashLiquidity governor can use this contract to govern cross-chain contracts indirectly (cross-chain contracts must be governed by CrossChainPortal).
- * @notice During action execution, the function will revert if this portal is included in the targets array of the action.
  */
 contract BaseChainPortal is Governable, Guardable, ChainPortal {
     error BaseChainPortal__SelfCallNotAuthorized();
@@ -63,16 +62,31 @@ contract BaseChainPortal is Governable, Guardable, ChainPortal {
     }
 
     /**
-     * @notice Revert if this portal is included in the targets array.
+     * @notice This function is used by the Chainlink CCIP router to deliver a message.
+     * @notice If the execution delay is 0, this function immediately executes the action included in the received message.
+     * @param message The Any2EVMMessage struct received from CCIP, containing a cross-chain action to be executed.
      */
-    function _verifyActionRestrictions(address, address[] memory targets, uint64) internal view override {
-        for (uint256 i; i < targets.length;) {
-            if (targets[i] == address(this)) {
-                revert BaseChainPortal__SelfCallNotAuthorized();
-            }
-            unchecked {
-                ++i;
-            }
+    function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
+        address sourceChainPortal = s_chainPortals[message.sourceChainSelector];
+        if (sourceChainPortal == address(0)) {
+            revert ChainPortal__InvalidChain(message.sourceChainSelector);
+        }
+        if (sourceChainPortal != abi.decode(message.sender, (address))) {
+            revert ChainPortal__InvalidPortal();
+        }
+        DataTypes.ActionQueueState storage queueState = s_queueState;
+        DataTypes.CrossChainAction memory action = abi.decode(message.data, (DataTypes.CrossChainAction));
+        if (queueState.executionDelay > 0) {
+            uint64 lastActionId = queueState.lastActionId;
+            queueState.lastActionId = lastActionId + 1;
+            s_actions[lastActionId] = action;
+            s_actionInfos[lastActionId] = DataTypes.ActionInfo(
+                uint64(block.timestamp), message.sourceChainSelector, DataTypes.ActionState.PENDING
+            );
+            emit InboundActionQueued(lastActionId, message.messageId);
+        } else {
+            _executeAction(action);
+            emit InboundActionExecuted(message.messageId);
         }
     }
 }

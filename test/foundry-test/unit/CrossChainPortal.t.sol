@@ -6,10 +6,11 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {CrossChainPortal} from "../../../contracts/CrossChainPortal.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
-import {ChainPortal} from "../../../contracts/ChainPortal.sol";
+import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
 import {CrossChainGovernable} from "flashliquidity-acs/contracts/CrossChainGovernable.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
-import {Guardable} from "flashliquidity-acs/contracts//Guardable.sol";
+import {CrossChainGovernorExecutor} from "../../../contracts/CrossChainGovernorExecutor.sol";
+import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
 import {ERC20Mock} from "../../mocks/ERC20Mock.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -53,8 +54,8 @@ contract CrossChainPortalTest is Test {
         signatures[0] = signature;
         calldatas[0] = callData;
         values[0] = value;
-        ChainPortal.CrossChainAction memory action =
-            ChainPortal.CrossChainAction(sender, targets, values, signatures, calldatas);
+        DataTypes.CrossChainAction memory action =
+            DataTypes.CrossChainAction(sender, targets, values, signatures, calldatas);
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), sourceChainSelector, abi.encode(senderPortal), abi.encode(action), tokenAmounts
@@ -85,7 +86,6 @@ contract CrossChainPortalTest is Test {
             address(linkToken),
             baseChainSelector,
             executionDelay,
-            intervalGuardianGoneRogue,
             intervalCommunicationLost
         );
         address[] memory portals = new address[](1);
@@ -96,60 +96,50 @@ contract CrossChainPortalTest is Test {
         baseChainPortal.setChainPortals(chainSelectors, portals);
     }
 
-    function testSetExecutionDelayOnlySelf() public {
-        (,, uint64 currentExecutionDelay,) = crossChainPortal.getActionQueueState();
+    function test__SetExecutionDelayOnlyGovernorExecutor() public {
+        (,, uint64 currentExecutionDelay) = crossChainPortal.getActionQueueState();
         assertEq(currentExecutionDelay, executionDelay);
         uint64 newExecutionDelay = 30;
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotSelfCall.selector);
+        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotGovernorExecutor.selector);
         crossChainPortal.setExecutionDelay(newExecutionDelay);
-        vm.prank(address(crossChainPortal));
+        vm.prank(crossChainPortal.getGovernorExecutorAddr());
         crossChainPortal.setExecutionDelay(newExecutionDelay);
-        (,, currentExecutionDelay,) = crossChainPortal.getActionQueueState();
+        (,, currentExecutionDelay) = crossChainPortal.getActionQueueState();
         assertEq(currentExecutionDelay, newExecutionDelay);
     }
 
-    function testSetGuardiansOnlySelf() public {
+    function test__SetGuardiansOnlyGovernorExecutor() public {
         address[] memory targets = new address[](1);
         bool[] memory enableds = new bool[](1);
         targets[0] = guardian;
         enableds[0] = false;
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotSelfCall.selector);
+        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotGovernorExecutor.selector);
         crossChainPortal.setGuardians(targets, enableds);
         assertTrue(crossChainPortal.isGuardian(guardian));
-        vm.prank(address(crossChainPortal));
+        vm.prank(crossChainPortal.getGovernorExecutorAddr());
         crossChainPortal.setGuardians(targets, enableds);
         assertFalse(crossChainPortal.isGuardian(guardian));
     }
 
-    function testSetIntervalGuardianGoneRogueOnlySelf() public {
+    function test__SetIntervalCommunicationLostOnlyGovernorExecutor() public {
         uint32 newInterval = 100;
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotSelfCall.selector);
-        crossChainPortal.setIntervalGuardianGoneRogue(newInterval);
-        assertFalse(crossChainPortal.getIntervalGuardianGoneRogue() == newInterval);
-        vm.prank(address(crossChainPortal));
-        crossChainPortal.setIntervalGuardianGoneRogue(newInterval);
-        assertTrue(crossChainPortal.getIntervalGuardianGoneRogue() == newInterval);
-    }
-
-    function testSetIntervalCommunicationLostOnlySelf() public {
-        uint32 newInterval = 100;
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotSelfCall.selector);
+        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotGovernorExecutor.selector);
         crossChainPortal.setIntervalCommunicationLost(newInterval);
         assertFalse(crossChainPortal.getIntervalCommunicationLost() == newInterval);
-        vm.prank(address(crossChainPortal));
+        vm.prank(crossChainPortal.getGovernorExecutorAddr());
         crossChainPortal.setIntervalCommunicationLost(newInterval);
         assertTrue(crossChainPortal.getIntervalCommunicationLost() == newInterval);
     }
 
-    function testSetPortalsOnlySelf() public {
+    function test__SetPortalsOnlyGovernorExecutor() public {
         assertEq(crossChainPortal.getPortal(baseChainSelector), address(baseChainPortal));
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = baseChainSelector;
         portals[0] = rob;
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotSelfCall.selector);
+        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotGovernorExecutor.selector);
         crossChainPortal.setChainPortals(chainSelectors, portals);
-        vm.startPrank(address(crossChainPortal));
+        vm.startPrank(crossChainPortal.getGovernorExecutorAddr());
         crossChainPortal.setChainPortals(chainSelectors, portals);
         assertEq(crossChainPortal.getPortal(chainSelectors[0]), rob);
         chainSelectors = new uint64[](2);
@@ -158,7 +148,7 @@ contract CrossChainPortalTest is Test {
         vm.stopPrank();
     }
 
-    function testSetLanesOnlySelf() public {
+    function test__SetLanesOnlyGovernorExecutor() public {
         address[] memory senders = new address[](1);
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory targets = new address[](1);
@@ -168,9 +158,9 @@ contract CrossChainPortalTest is Test {
         targets[0] = alice;
         enableds[0] = true;
         assertFalse(crossChainPortal.isAuthorizedLane(senders[0], chainSelectors[0], targets[0]));
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotSelfCall.selector);
+        vm.expectRevert(CrossChainPortal.CrossChainPortal__NotGovernorExecutor.selector);
         crossChainPortal.setLanes(senders, chainSelectors, targets, enableds);
-        vm.startPrank(address(crossChainPortal));
+        vm.startPrank(crossChainPortal.getGovernorExecutorAddr());
         crossChainPortal.setLanes(senders, chainSelectors, targets, enableds);
         assertTrue(crossChainPortal.isAuthorizedLane(senders[0], chainSelectors[0], targets[0]));
         senders = new address[](2);
@@ -179,9 +169,9 @@ contract CrossChainPortalTest is Test {
         vm.stopPrank();
     }
 
-    function testCcipReceive() public {
-        ChainPortal.CrossChainAction memory action =
-            ChainPortal.CrossChainAction(governor, new address[](0), new uint256[](0), new string[](0), new bytes[](0));
+    function test__CcipReceive() public {
+        DataTypes.CrossChainAction memory action =
+            DataTypes.CrossChainAction(bob, new address[](0), new uint256[](0), new string[](0), new bytes[](0));
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), baseChainSelector, abi.encode(baseChainPortal), abi.encode(action), tokenAmounts
@@ -200,58 +190,27 @@ contract CrossChainPortalTest is Test {
         vm.stopPrank();
     }
 
-    function testTeleport() public {
-        vm.expectRevert(ChainPortal.ChainPortal__ZeroTargets.selector);
-        crossChainPortal.teleport(
-            baseChainSelector,
-            gasLimit,
-            new address[](0),
-            new uint256[](0),
-            new string[](0),
-            new bytes[](0),
-            new address[](0),
-            new uint256[](0)
-        );
-        uint64[] memory chainSelectors = new uint64[](1);
-        address[] memory senders = new address[](1);
-        address[] memory targets = new address[](1);
-        bool[] memory enableds = new bool[](1);
-        chainSelectors[0] = baseChainSelector;
-        senders[0] = alice;
-        targets[0] = bob;
-        enableds[0] = true;
-        vm.expectRevert(ChainPortal.ChainPortal__LaneNotAvailable.selector);
-        crossChainPortal.teleport(
-            baseChainSelector,
-            gasLimit,
-            targets,
-            new uint256[](1),
-            new string[](1),
-            new bytes[](1),
-            new address[](0),
-            new uint256[](0)
-        );
-        vm.prank(address(crossChainPortal));
-        crossChainPortal.setLanes(senders, chainSelectors, targets, enableds);
-        assertEq(crossChainPortal.getPortal(baseChainSelector), address(baseChainPortal));
-        vm.startPrank(alice);
-        crossChainPortal.teleport(
-            baseChainSelector,
-            gasLimit,
-            targets,
-            new uint256[](1),
-            new string[](1),
-            new bytes[](1),
-            new address[](0),
-            new uint256[](0)
-        );
-        vm.stopPrank();
-    }
-
-    function testAbortAction() public {
+    function test__CcipReceiveSenderIsCrossChainGovernor() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             governor,
+            address(baseChainPortal),
+            baseChainSelector,
+            address(linkToken),
+            0,
+            "approve(address,uint256)",
+            abi.encode(bob, approveAmountBob)
+        );
+        assertTrue(linkToken.allowance(crossChainPortal.getGovernorExecutorAddr(), bob) == 0);
+        vm.prank(address(ccipRouter));
+        crossChainPortal.ccipReceive(message);
+        assertTrue(linkToken.allowance(crossChainPortal.getGovernorExecutorAddr(), bob) == approveAmountBob);
+    }
+
+    function test__AbortAction() public {
+        uint256 approveAmountBob = 1000;
+        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
+            bob,
             address(baseChainPortal),
             baseChainSelector,
             address(linkToken),
@@ -272,24 +231,7 @@ contract CrossChainPortalTest is Test {
         crossChainPortal.performUpkeep(new bytes(0));
     }
 
-    function testExecuteActionSetPendingGovernorRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setPendingGovernor(address,uint64)",
-            abi.encode(bob, baseChainSelector)
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testExecuteActionSetPendingGovernorRevertIfZeroChainSelector() public {
+    function test__ExecuteActionSetPendingGovernor() public {
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             governor,
             address(baseChainPortal),
@@ -297,34 +239,15 @@ contract CrossChainPortalTest is Test {
             address(crossChainPortal),
             0,
             "setPendingGovernor(address,uint64)",
-            abi.encode(bob, 0)
+            abi.encode(bob, crossChainSelector)
         );
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__ZeroChainSelector.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
+        assertTrue(crossChainPortal.getPendingGovernor() == bob);
+        assertTrue(crossChainPortal.getPendingGovernorChainSelector() == crossChainSelector);
     }
 
-    function testExecuteActionSetPendingGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            governor,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setPendingGovernor(address,uint64)",
-            abi.encode(bob, baseChainSelector)
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        crossChainPortal.performUpkeep(new bytes(0));
-        assertEq(crossChainPortal.getPendingGovernor(), bob);
-        assertEq(crossChainPortal.getPendingGovernorChainSelector(), baseChainSelector);
-    }
-
-    function testExecuteActionGovernanceTransfer() public {
+    function test__ExecuteActionGovernanceTransfer() public {
         assertTrue(crossChainPortal.getPendingGovernor() == address(0));
         vm.expectRevert(Guardable.Guardable__NotGuardian.selector);
         crossChainPortal.transferGovernance();
@@ -342,8 +265,6 @@ contract CrossChainPortalTest is Test {
         );
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        crossChainPortal.performUpkeep(new bytes(0));
         vm.expectRevert(CrossChainGovernable.CrossChainGovernable__TooEarly.selector);
         vm.prank(guardian);
         crossChainPortal.transferGovernance();
@@ -352,112 +273,10 @@ contract CrossChainPortalTest is Test {
         crossChainPortal.transferGovernance();
     }
 
-    function testExecuteActionSetExecutionDelayRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setExecutionDelay(uint64)",
-            abi.encode(uint64(1000))
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testExecuteActionSetLanesRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setLanes(address[],uint64[],address[],bool[])",
-            abi.encode(new address[](0), new uint64[](0), new address[](0), new bool[](0))
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testExecuteActionSetChainPortalsRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setChainPortals(uint64[],address[])",
-            abi.encode(new uint64[](0), new address[](0))
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testExecuteActionSetGuardiansRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setExecutionDelay(uint64)",
-            abi.encode(3601)
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testExecuteActionSetIntervalGuardianGoneRogueRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setIntervalGuardianGoneRogue(uint32)",
-            abi.encode(3601)
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testExecuteActionSetIntervalCommunicationLostRevertIfNotCrossChainGovernor() public {
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(crossChainPortal),
-            0,
-            "setIntervalCommunicationLost(uint32)",
-            abi.encode(3601)
-        );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.warp(block.timestamp + executionDelay + 1);
-        vm.expectRevert(CrossChainGovernable.CrossChainGovernable__NotAuthorized.selector);
-        crossChainPortal.performUpkeep(new bytes(0));
-    }
-
-    function testGuardianGoneRogue() public {
+    function test__EmergencyConnectionLost() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            governor,
+            bob,
             address(baseChainPortal),
             baseChainSelector,
             address(linkToken),
@@ -465,37 +284,49 @@ contract CrossChainPortalTest is Test {
             "approve(address,uint256)",
             abi.encode(bob, approveAmountBob)
         );
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.prank(guardian);
-        vm.warp(block.timestamp + executionDelay + 1);
-        crossChainPortal.performUpkeep(new bytes(0));
-        vm.warp(block.timestamp + crossChainPortal.getIntervalGuardianGoneRogue() + 1);
-        vm.prank(address(ccipRouter));
-        crossChainPortal.ccipReceive(message);
-        vm.prank(guardian);
-        vm.expectRevert(CrossChainPortal.CrossChainPortal__GuardianGoneRogue.selector);
-        crossChainPortal.abortAction(1);
-    }
-
-    function testEmergencyConnectionLost() public {
-        uint256 approveAmountBob = 1000;
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            governor,
-            address(baseChainPortal),
-            baseChainSelector,
-            address(linkToken),
-            0,
-            "approve(address,uint256)",
-            abi.encode(bob, approveAmountBob)
-        );
+        DataTypes.CrossChainAction memory action = abi.decode(message.data, (DataTypes.CrossChainAction));
         vm.prank(address(ccipRouter));
         crossChainPortal.ccipReceive(message);
         vm.prank(guardian);
         vm.expectRevert(CrossChainPortal.CrossChainPortal__CommunicationNotLost.selector);
-        crossChainPortal.emergencyCommunicationLost(message);
+        crossChainPortal.emergencyCommunicationLost(action);
         vm.warp(block.timestamp + executionDelay + 1 + crossChainPortal.getIntervalCommunicationLost() + 1);
         vm.prank(guardian);
-        crossChainPortal.emergencyCommunicationLost(message);
+        crossChainPortal.emergencyCommunicationLost(action);
+    }
+
+    function test__GovernorExecutorOnlyCrossChainPortal() public {
+        CrossChainGovernorExecutor governorExecutor =
+            CrossChainGovernorExecutor(crossChainPortal.getGovernorExecutorAddr());
+        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
+            bob,
+            address(baseChainPortal),
+            baseChainSelector,
+            address(linkToken),
+            0,
+            "approve(address,uint256)",
+            abi.encode(bob, 1000)
+        );
+        vm.expectRevert(CrossChainGovernorExecutor.CrossChainGovernorExecutor__NotCrossChainPortal.selector);
+        governorExecutor.executeAction(abi.decode(message.data, (DataTypes.CrossChainAction)));
+        vm.prank(address(crossChainPortal));
+        governorExecutor.executeAction(abi.decode(message.data, (DataTypes.CrossChainAction)));
+    }
+
+    function test__GovernorExecutorRevertOnActionExecution() public {
+        CrossChainGovernorExecutor governorExecutor =
+            CrossChainGovernorExecutor(crossChainPortal.getGovernorExecutorAddr());
+        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
+            bob,
+            address(baseChainPortal),
+            baseChainSelector,
+            address(linkToken),
+            0,
+            "",
+            abi.encodeWithSignature("based(address,uint256)", bob, 1000)
+        );
+        vm.prank(address(crossChainPortal));
+        vm.expectRevert(CrossChainGovernorExecutor.CrossChainGovernorExecutor__ActionExecutionFailed.selector);
+        governorExecutor.executeAction(abi.decode(message.data, (DataTypes.CrossChainAction)));
     }
 }

@@ -5,7 +5,7 @@ pragma solidity 0.8.19;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
-import {ChainPortal} from "../../../contracts/ChainPortal.sol";
+import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
@@ -51,7 +51,7 @@ contract ChainPortalTest is Test {
         address[] memory tokens,
         uint256[] memory amounts
     ) public view returns (Client.Any2EVMMessage memory) {
-        ChainPortal.CrossChainAction memory action = ChainPortal.CrossChainAction({
+        DataTypes.CrossChainAction memory action = DataTypes.CrossChainAction({
             sender: msg.sender,
             targets: targets,
             values: values,
@@ -156,7 +156,7 @@ contract ChainPortalTest is Test {
         bytes32 messageId,
         uint64 sourceChainSelector,
         address sourcePortal,
-        ChainPortal.CrossChainAction memory action,
+        DataTypes.CrossChainAction memory action,
         bool isChainPortalSet,
         bool isAuthorizedSourcePortal
     ) public {

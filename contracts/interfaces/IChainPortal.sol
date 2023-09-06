@@ -65,7 +65,7 @@ interface IChainPortal {
     function getActionQueueState()
         external
         view
-        returns (uint64 nextActionId, uint64 lastActionId, uint64 executionDelay, uint64 lastTimePendingActionExecuted);
+        returns (uint64 nextActionId, uint64 lastActionId, uint64 executionDelay);
 
     /**
      * @notice This function returns action parameters given the ID of the action.

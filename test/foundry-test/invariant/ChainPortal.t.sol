@@ -5,7 +5,7 @@ pragma solidity 0.8.19;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
-import {ChainPortal} from "../../../contracts/ChainPortal.sol";
+import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
@@ -49,8 +49,8 @@ contract ChainPortalTest is Test {
         signatures[0] = signature;
         calldatas[0] = callData;
         values[0] = value;
-        ChainPortal.CrossChainAction memory action =
-            ChainPortal.CrossChainAction(sender, targets, values, signatures, calldatas);
+        DataTypes.CrossChainAction memory action =
+            DataTypes.CrossChainAction(sender, targets, values, signatures, calldatas);
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), sourceChainSelector, abi.encode(senderPortal), abi.encode(action), tokenAmounts
@@ -92,13 +92,13 @@ contract ChainPortalTest is Test {
     // coverage skip workaround
     function test() public {}
 
-    function invariantLastActionIdIsAlwaysGreaterOrEqualNextActionId() public {
-        (uint64 nextActionId, uint64 lastActionId,,) = portal.getActionQueueState();
+    function invariant__LastActionIdIsAlwaysGreaterOrEqualNextActionId() public {
+        (uint64 nextActionId, uint64 lastActionId,) = portal.getActionQueueState();
         assertTrue(lastActionId >= nextActionId);
     }
 
-    function invariantExpectedActionState() public {
-        (uint64 nextActionId, uint64 lastActionId,,) = portal.getActionQueueState();
+    function invariant__ExpectedActionState() public {
+        (uint64 nextActionId, uint64 lastActionId,) = portal.getActionQueueState();
         (,, uint8 lastActionState) = portal.getActionInfoById(lastActionId);
         (,, uint8 nextActionState) = portal.getActionInfoById(nextActionId);
         if (lastActionId == 0 || lastActionId == nextActionId) {

@@ -7,13 +7,13 @@ via_ir = false
 libs = ['node_modules', 'lib']
 test = 'test'
 cache_path  = 'foundry-cache'
-gas_reports = ["BaseChainPortal", "CrossChainPortal"]
+gas_reports = ["BaseChainPortal", "CrossChainPortal", "CrossChainGovernorExecutor"]
 bytecode_hash = "none"
 ffi = false
 
 [fuzz]
-runs = 256      #10000000 
+runs = 512
 
 [invariant]
-runs = 128      #10000
-depth = 16      #128
+runs = 32
+depth = 128
