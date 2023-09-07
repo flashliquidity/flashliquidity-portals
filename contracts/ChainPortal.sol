@@ -359,7 +359,6 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     }
 
     /// @param timestampQueued Timestamp of when the action has been queued.
-
     function _isActionExecutable(uint64 timestampQueued) private view returns (bool) {
         return timestampQueued != 0 && block.timestamp - timestampQueued > s_queueState.executionDelay;
     }
