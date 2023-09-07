@@ -11,10 +11,8 @@ import {ChainPortal, Client, DataTypes} from "./ChainPortal.sol";
  * @author Oddcod3 (@oddcod3)
  *
  * @dev Main portal deployed on the base chain where the FlashLiquidity governor is deployed.
- *
- * @notice This contract is used to communicate with other CrossChainPortals.
- * @notice The FlashLiquidity governor can use this contract to govern CrossChainPortals.
- * @notice The FlashLiquidity governor can use this contract to govern cross-chain contracts indirectly (cross-chain contracts must be governed by CrossChainPortal).
+ * @notice This contract is used to send/receive actions to/from CrossChainPortals.
+ * @notice FlashLiquidity governor can use this contract to govern cross-chain contracts.
  */
 contract BaseChainPortal is Governable, Guardable, ChainPortal {
     error BaseChainPortal__SelfCallNotAuthorized();

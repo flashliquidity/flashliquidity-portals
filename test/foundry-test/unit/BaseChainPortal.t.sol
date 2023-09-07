@@ -219,9 +219,8 @@ contract BaseChainPortalTest is Test {
     }
 
     function test__CcipReceive() public {
-        DataTypes.CrossChainAction memory action = DataTypes.CrossChainAction(
-            governor, new address[](0), new uint256[](0), new string[](0), new bytes[](0)
-        );
+        DataTypes.CrossChainAction memory action =
+            DataTypes.CrossChainAction(governor, new address[](0), new uint256[](0), new string[](0), new bytes[](0));
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
             bytes32(uint256(0x01)), baseChainSelector, abi.encode(address(cc_portal)), abi.encode(action), tokenAmounts

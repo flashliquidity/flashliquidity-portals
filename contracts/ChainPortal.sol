@@ -20,7 +20,7 @@ import {DataTypes} from "./libraries/DataTypes.sol";
  * @dev The ChainPortal empowers cross-chain communication and token bridging between
  *      different portals deployed across multiple EVM chains.
  *
- * @notice Functionalities:
+ * @dev Functionalities:
  * - send cross-chain actions to be executed by the receivier portal on the destination chain
  * - receive and execute cross-chain actions sent from other authorized portals deployed across different chains
  * - bridge allowed tokens to a receving portal on destination chain
@@ -185,9 +185,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         emit QueuedActionExecuted(nextActionId);
     }
 
-    /**
-     * @param action The CrossChainAction struct of the action to be executed
-     */
+    /// @param action The CrossChainAction struct of the action to be executed
     function _executeAction(DataTypes.CrossChainAction memory action) internal {
         bool success;
         bytes memory callData;
@@ -215,9 +213,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         }
     }
 
-    /**
-     * @param actionId The ID of the action to be aborted
-     */
+    /// @param actionId The ID of the action to be aborted
     function _abortAction(uint64 actionId) internal {
         DataTypes.ActionQueueState memory queueState = s_queueState;
         if (actionId < queueState.nextActionId || actionId >= queueState.lastActionId) {
@@ -231,9 +227,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         emit ActionAborted(actionId);
     }
 
-    /**
-     * @param executionDelay The minimum execution delay that actions must be subjected to between being queued and being executed.
-     */
+    /// @param executionDelay The minimum execution delay that actions must be subjected to between being queued and being executed.
     function _setExecutionDelay(uint64 executionDelay) internal {
         s_queueState.executionDelay = executionDelay;
         emit ExecutionDelayChanged(executionDelay);
@@ -364,9 +358,8 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         });
     }
 
-    /**
-     * @param timestampQueued Timestamp of when the action has been queued.
-     */
+    /// @param timestampQueued Timestamp of when the action has been queued.
+
     function _isActionExecutable(uint64 timestampQueued) private view returns (bool) {
         return timestampQueued != 0 && block.timestamp - timestampQueued > s_queueState.executionDelay;
     }

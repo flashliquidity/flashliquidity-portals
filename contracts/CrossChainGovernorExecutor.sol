@@ -9,8 +9,7 @@ import {DataTypes} from "./libraries/DataTypes.sol";
  * @author Oddcod3 (@oddcod3)
  *
  * @dev Governor proxy used from cross-chain portals to execute actions received sent by cross-chain governor
- *
- * @notice The address of this contract should be the owner/governor of ownable/governable contracts deployed on the same chain
+ * @notice The address of this contract should be the owner/governor of ownable/governable contracts deployed on the same chain.
  */
 contract CrossChainGovernorExecutor {
     error CrossChainGovernorExecutor__ActionExecutionFailed();
@@ -27,9 +26,7 @@ contract CrossChainGovernorExecutor {
         s_crossChainPortal = msg.sender;
     }
 
-    /**
-     * @param action The action to be executed
-     */
+    /// @param action The action to be executed
     function executeAction(DataTypes.CrossChainAction memory action) external onlyCrossChainPortal {
         bool success;
         bytes memory callData;
