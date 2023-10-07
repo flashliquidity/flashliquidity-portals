@@ -15,7 +15,6 @@ import {ChainPortal, Client, DataTypes} from "./ChainPortal.sol";
  * @notice FlashLiquidity governor can use this contract to govern cross-chain contracts.
  */
 contract BaseChainPortal is Governable, Guardable, ChainPortal {
-    error BaseChainPortal__SelfCallNotAuthorized();
 
     constructor(address governor, address guardian, address ccipRouter, address linkToken, uint64 executionDelay)
         Governable(governor)
