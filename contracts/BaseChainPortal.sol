@@ -60,7 +60,7 @@ contract BaseChainPortal is Governable, Guardable, ChainPortal {
     }
 
     /**
-     * @notice This function is used by the Chainlink CCIP router to deliver a message.
+     * @notice This function is used by Chainlink CCIP router to deliver a message.
      * @notice If the execution delay is 0, this function immediately executes the action included in the received message.
      * @param message The Any2EVMMessage struct received from CCIP, containing a cross-chain action to be executed.
      */

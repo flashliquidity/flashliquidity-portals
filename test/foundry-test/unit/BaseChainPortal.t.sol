@@ -5,6 +5,7 @@ pragma solidity 0.8.19;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
+import {CrossChainPortal} from "../../../contracts/CrossChainPortal.sol";
 import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
@@ -14,7 +15,8 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 
 contract BaseChainPortalTest is Test {
-    BaseChainPortal public portal;
+    BaseChainPortal public baseChainPortal;
+    CrossChainPortal public crossChainPortal;
     CcipRouterMock public ccipRouter;
     ERC20Mock public linkToken;
     address public governor = makeAddr("governor");
@@ -22,7 +24,6 @@ contract BaseChainPortalTest is Test {
     address public bob = makeAddr("bob");
     address public alice = makeAddr("alice");
     address public rob = makeAddr("rob");
-    address public cc_portal = makeAddr("cc_portal");
 
     uint64 public baseChainSelector = uint64(block.chainid);
     uint64 public crossChainSelector = uint64(4444);
@@ -30,7 +31,7 @@ contract BaseChainPortalTest is Test {
     uint64 public gasLimit = 1e6;
 
     bytes ChainPortal__InvalidChain =
-        abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, uint64(block.chainid));
+        abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, crossChainSelector);
 
     function buildMessageWithSingleAction(
         address sender,
@@ -66,64 +67,74 @@ contract BaseChainPortalTest is Test {
             address(linkToken),
             uint64(block.chainid)
         );
-        portal = new BaseChainPortal(
+        baseChainPortal = new BaseChainPortal(
             governor,
             guardian,
             address(ccipRouter),
             address(linkToken),
             executionDelay
         );
+        crossChainPortal = new CrossChainPortal(
+            governor,
+            guardian,
+            address(baseChainPortal),
+            address(ccipRouter),
+            address(linkToken),
+            baseChainSelector,
+            executionDelay,
+            7 days
+        );
     }
 
-    function test__SetExecutionDelay() public {
-        (,, uint64 currentExecutionDelay) = portal.getActionQueueState();
+    function test__BCP_SetExecutionDelay() public {
+        (,, uint64 currentExecutionDelay) = baseChainPortal.getActionQueueState();
         assertEq(currentExecutionDelay, executionDelay);
         uint64 newExecutionDelay = 30;
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
-        portal.setExecutionDelay(newExecutionDelay);
+        baseChainPortal.setExecutionDelay(newExecutionDelay);
         vm.prank(governor);
-        portal.setExecutionDelay(newExecutionDelay);
-        (,, currentExecutionDelay) = portal.getActionQueueState();
+        baseChainPortal.setExecutionDelay(newExecutionDelay);
+        (,, currentExecutionDelay) = baseChainPortal.getActionQueueState();
         assertEq(currentExecutionDelay, newExecutionDelay);
     }
 
-    function test__SetGuardians() public {
+    function test__BCP_SetGuardians() public {
         address[] memory targets = new address[](1);
         bool[] memory enableds = new bool[](1);
         targets[0] = guardian;
         enableds[0] = false;
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
-        portal.setGuardians(targets, enableds);
+        baseChainPortal.setGuardians(targets, enableds);
         vm.prank(guardian);
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
-        portal.setGuardians(targets, enableds);
-        assertTrue(portal.isGuardian(guardian));
+        baseChainPortal.setGuardians(targets, enableds);
+        assertTrue(baseChainPortal.isGuardian(guardian));
         vm.prank(governor);
-        portal.setGuardians(targets, enableds);
-        assertFalse(portal.isGuardian(guardian));
+        baseChainPortal.setGuardians(targets, enableds);
+        assertFalse(baseChainPortal.isGuardian(guardian));
     }
 
-    function test__SetPortals() public {
+    function test__BCP_SetPortals() public {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = baseChainSelector;
-        portals[0] = address(cc_portal);
-        assertEq(portal.getPortal(chainSelectors[0]), address(0));
+        portals[0] = address(crossChainPortal);
+        assertEq(baseChainPortal.getPortal(chainSelectors[0]), address(0));
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(guardian);
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.startPrank(governor);
-        portal.setChainPortals(chainSelectors, portals);
-        assertEq(portal.getPortal(chainSelectors[0]), address(cc_portal));
+        baseChainPortal.setChainPortals(chainSelectors, portals);
+        assertEq(baseChainPortal.getPortal(chainSelectors[0]), address(crossChainPortal));
         chainSelectors = new uint64[](2);
         vm.expectRevert(ChainPortal.ChainPortal__ArrayLengthMismatch.selector);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.stopPrank();
     }
 
-    function test__SetLanes() public {
+    function test__BCP_SetLanes() public {
         address[] memory senders = new address[](1);
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory targets = new address[](1);
@@ -132,22 +143,22 @@ contract BaseChainPortalTest is Test {
         chainSelectors[0] = baseChainSelector;
         targets[0] = alice;
         enableds[0] = true;
-        assertFalse(portal.isAuthorizedLane(senders[0], chainSelectors[0], targets[0]));
+        assertFalse(baseChainPortal.isAuthorizedLane(senders[0], chainSelectors[0], targets[0]));
         vm.expectRevert(Governable.Governable__NotAuthorized.selector);
-        portal.setLanes(senders, chainSelectors, targets, enableds);
+        baseChainPortal.setLanes(senders, chainSelectors, targets, enableds);
         vm.startPrank(governor);
-        portal.setLanes(senders, chainSelectors, targets, enableds);
-        assertTrue(portal.isAuthorizedLane(senders[0], chainSelectors[0], targets[0]));
+        baseChainPortal.setLanes(senders, chainSelectors, targets, enableds);
+        assertTrue(baseChainPortal.isAuthorizedLane(senders[0], chainSelectors[0], targets[0]));
         senders = new address[](2);
         vm.expectRevert(ChainPortal.ChainPortal__ArrayLengthMismatch.selector);
-        portal.setLanes(senders, chainSelectors, targets, enableds);
+        baseChainPortal.setLanes(senders, chainSelectors, targets, enableds);
         vm.stopPrank();
     }
 
-    function test__Teleport() public {
+    function test__BCP_Teleport() public {
         vm.expectRevert(ChainPortal.ChainPortal__ZeroTargets.selector);
-        portal.teleport(
-            baseChainSelector,
+        baseChainPortal.teleport(
+            crossChainSelector,
             gasLimit,
             new address[](0),
             new uint256[](0),
@@ -161,14 +172,15 @@ contract BaseChainPortalTest is Test {
         address[] memory senders = new address[](1);
         address[] memory targets = new address[](1);
         bool[] memory enableds = new bool[](1);
-        chainSelectors[0] = baseChainSelector;
-        portals[0] = address(portal);
-        senders[0] = governor;
+        chainSelectors[0] = crossChainSelector;
+        portals[0] = address(crossChainPortal);
+        senders[0] = alice;
         targets[0] = bob;
         enableds[0] = true;
+        vm.prank(alice);
         vm.expectRevert(ChainPortal.ChainPortal__LaneNotAvailable.selector);
-        portal.teleport(
-            baseChainSelector,
+        baseChainPortal.teleport(
+            crossChainSelector,
             gasLimit,
             targets,
             new uint256[](1),
@@ -177,11 +189,12 @@ contract BaseChainPortalTest is Test {
             new address[](0),
             new uint256[](0)
         );
-        vm.startPrank(governor);
-        portal.setLanes(senders, chainSelectors, targets, enableds);
+        vm.prank(governor);
+        baseChainPortal.setLanes(senders, chainSelectors, targets, enableds);
+        vm.prank(alice);
         vm.expectRevert(ChainPortal__InvalidChain);
-        portal.teleport(
-            baseChainSelector,
+        baseChainPortal.teleport(
+            crossChainSelector,
             gasLimit,
             targets,
             new uint256[](1),
@@ -190,9 +203,11 @@ contract BaseChainPortalTest is Test {
             new address[](0),
             new uint256[](0)
         );
-        portal.setChainPortals(chainSelectors, portals);
-        portal.teleport(
-            baseChainSelector,
+        vm.prank(governor);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
+        vm.prank(alice);
+        baseChainPortal.teleport(
+            crossChainSelector,
             gasLimit,
             targets,
             new uint256[](1),
@@ -204,9 +219,10 @@ contract BaseChainPortalTest is Test {
         address[] memory targetsWrongLength = new address[](2);
         targetsWrongLength[0] = bob;
         targetsWrongLength[1] = bob;
+        vm.prank(alice);
         vm.expectRevert(ChainPortal.ChainPortal__ArrayLengthMismatch.selector);
-        portal.teleport(
-            baseChainSelector,
+        baseChainPortal.teleport(
+            crossChainSelector,
             gasLimit,
             targetsWrongLength,
             new uint256[](1),
@@ -215,37 +231,40 @@ contract BaseChainPortalTest is Test {
             new address[](0),
             new uint256[](0)
         );
-        vm.stopPrank();
     }
 
-    function test__CcipReceive() public {
+    function test__BCP_CcipReceive() public {
         DataTypes.CrossChainAction memory action =
             DataTypes.CrossChainAction(governor, new address[](0), new uint256[](0), new string[](0), new bytes[](0));
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
-            bytes32(uint256(0x01)), baseChainSelector, abi.encode(address(cc_portal)), abi.encode(action), tokenAmounts
+            bytes32(uint256(0x01)),
+            crossChainSelector,
+            abi.encode(address(crossChainPortal)),
+            abi.encode(action),
+            tokenAmounts
         );
         vm.prank(rob);
         vm.expectRevert(abi.encodeWithSelector(CCIPReceiver.InvalidRouter.selector, rob));
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.prank(address(ccipRouter));
         vm.expectRevert(ChainPortal__InvalidChain);
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
-        chainSelectors[0] = baseChainSelector;
-        portals[0] = cc_portal;
+        chainSelectors[0] = crossChainSelector;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
     }
 
-    function test__AbortAction() public {
+    function test__BCP_AbortAction() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -255,27 +274,27 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.expectRevert(Guardable.Guardable__NotGuardian.selector);
-        portal.abortAction(0);
+        baseChainPortal.abortAction(0);
         vm.prank(guardian);
-        portal.abortAction(0);
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.abortAction(0);
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
         vm.expectRevert(ChainPortal.ChainPortal__NoActionQueued.selector);
-        portal.performUpkeep(new bytes(0));
+        baseChainPortal.performUpkeep(new bytes(0));
     }
 
-    function test__ExecuteActionSingleTarget() public {
+    function test__BCP_ExecuteActionSingleTarget() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -285,22 +304,22 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.expectRevert(ChainPortal.ChainPortal__ActionNotExecutable.selector);
-        portal.performUpkeep(new bytes(0));
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
-        portal.performUpkeep(new bytes(0));
-        allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, approveAmountBob);
     }
 
-    function test__ExecuteActionMultipleTarget() public {
+    function test__BCP_ExecuteActionMultipleTarget() public {
         (uint256 approveAmountBob, uint256 approveAmountRob) = (1000, 2000);
         address[] memory targets = new address[](2);
         uint256[] memory values = new uint256[](2);
@@ -314,35 +333,35 @@ contract BaseChainPortalTest is Test {
             DataTypes.CrossChainAction(governor, targets, values, signatures, calldatas);
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
-            bytes32(uint256(0x01)), crossChainSelector, abi.encode(cc_portal), abi.encode(action), tokenAmounts
+            bytes32(uint256(0x01)), crossChainSelector, abi.encode(crossChainPortal), abi.encode(action), tokenAmounts
         );
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.expectRevert(ChainPortal.ChainPortal__ActionNotExecutable.selector);
-        portal.performUpkeep(new bytes(0));
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
-        uint256 allowanceRob = linkToken.allowance(address(portal), rob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
+        uint256 allowanceRob = linkToken.allowance(address(baseChainPortal), rob);
         assertEq(allowanceBob, 0);
         assertEq(allowanceRob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
-        portal.performUpkeep(new bytes(0));
-        allowanceBob = linkToken.allowance(address(portal), bob);
-        allowanceRob = linkToken.allowance(address(portal), rob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
+        allowanceRob = linkToken.allowance(address(baseChainPortal), rob);
         assertEq(allowanceBob, approveAmountBob);
         assertEq(allowanceRob, approveAmountRob);
     }
 
-    function test__RevertOnActionExecution() public {
+    function test__BCP_RevertOnActionExecution() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -352,25 +371,25 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.expectRevert(ChainPortal.ChainPortal__ActionNotExecutable.selector);
-        portal.performUpkeep(new bytes(0));
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
         vm.expectRevert(ChainPortal.ChainPortal__ActionExecutionFailed.selector);
-        portal.performUpkeep(new bytes(0));
+        baseChainPortal.performUpkeep(new bytes(0));
     }
 
-    function test__SkipAbortedActionAndExecute() public {
+    function test__BCP_SkipAbortedActionAndExecute() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -380,33 +399,33 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.startPrank(address(ccipRouter));
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.stopPrank();
         vm.startPrank(guardian);
-        portal.abortAction(0);
-        portal.abortAction(1);
+        baseChainPortal.abortAction(0);
+        baseChainPortal.abortAction(1);
         vm.stopPrank();
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
-        portal.performUpkeep(new bytes(0));
-        allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, approveAmountBob);
         vm.expectRevert(ChainPortal.ChainPortal__NoActionQueued.selector);
-        portal.performUpkeep(new bytes(0));
+        baseChainPortal.performUpkeep(new bytes(0));
     }
 
-    function test__ExecuteActionSkipAbortedAndRevertOnEmpty() public {
+    function test__BCP_ExecuteActionSkipAbortedAndRevertOnEmpty() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -416,31 +435,31 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.startPrank(address(ccipRouter));
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.stopPrank();
         vm.startPrank(guardian);
-        portal.abortAction(0);
-        portal.abortAction(1);
-        portal.abortAction(2);
+        baseChainPortal.abortAction(0);
+        baseChainPortal.abortAction(1);
+        baseChainPortal.abortAction(2);
         vm.stopPrank();
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
         vm.expectRevert(ChainPortal.ChainPortal__NoActionQueued.selector);
-        portal.performUpkeep(new bytes(0));
+        baseChainPortal.performUpkeep(new bytes(0));
     }
 
-    function test__ExecuteActionSkipAbortedAndExecute() public {
+    function test__BCP_ExecuteActionSkipAbortedAndExecute() public {
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -450,37 +469,37 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.startPrank(address(ccipRouter));
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
-        portal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
+        baseChainPortal.ccipReceive(message);
         vm.stopPrank();
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, 0);
         vm.warp(block.timestamp + executionDelay + 1);
-        portal.performUpkeep(new bytes(0));
-        allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.performUpkeep(new bytes(0));
+        allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, approveAmountBob);
         vm.startPrank(guardian);
-        portal.abortAction(1);
-        portal.abortAction(2);
+        baseChainPortal.abortAction(1);
+        baseChainPortal.abortAction(2);
         vm.stopPrank();
-        portal.performUpkeep(new bytes(0));
+        baseChainPortal.performUpkeep(new bytes(0));
         vm.expectRevert(ChainPortal.ChainPortal__NoActionQueued.selector);
-        portal.performUpkeep(new bytes(0));
+        baseChainPortal.performUpkeep(new bytes(0));
     }
 
-    function test__ZeroExecutionDelay() public {
+    function test__BCP_ZeroExecutionDelay() public {
         vm.prank(governor);
-        portal.setExecutionDelay(0);
+        baseChainPortal.setExecutionDelay(0);
         uint256 approveAmountBob = 1000;
         Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
             bob,
-            cc_portal,
+            address(crossChainPortal),
             crossChainSelector,
             address(linkToken),
             0,
@@ -490,12 +509,12 @@ contract BaseChainPortalTest is Test {
         uint64[] memory chainSelectors = new uint64[](1);
         address[] memory portals = new address[](1);
         chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
+        portals[0] = address(crossChainPortal);
         vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
+        baseChainPortal.setChainPortals(chainSelectors, portals);
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
-        uint256 allowanceBob = linkToken.allowance(address(portal), bob);
+        baseChainPortal.ccipReceive(message);
+        uint256 allowanceBob = linkToken.allowance(address(baseChainPortal), bob);
         assertEq(allowanceBob, approveAmountBob);
     }
 }

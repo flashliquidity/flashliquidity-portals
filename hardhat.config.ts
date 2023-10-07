@@ -10,16 +10,18 @@ import { HardhatUserConfig } from "hardhat/config"
 const foundryConfig = importToml.sync('foundry.toml')
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY
-const ETHEREUM_RPC = process.env.ETHEREUM_RPC
-const ETHEREUM_SEPOLIA_RPC = process.env.ETHEREUM_SEPOLIA_RPC
-const POLYGON_MAINNET_RPC = "https://rpc-mainnet.maticvigil.com"
-const POLYGON_MUMBAI_RPC = "https://rpc-mumbai.maticvigil.com/"
-const POLYGON_ZKEVM_TESTNET_RPC = "https://rpc.public.zkevm-test.net"
-const POLYGON_ZKEVM_RPC = "https://zkevm-rpc.com"
-const AVALANCHE_C_CHAIN_RPC = "https://api.avax.network/ext/bc/C/rpc"
-const AVALANCHE_FUJI_RPC = "https://api.avax-test.network/ext/bc/C/rpc"
-const ARBITRUM_ONE_RPC = "https://arb1.arbitrum.io/rpc"
-const ARBITRUM_TESTNET_RPC = "https://goerli-rollup.arbitrum.io/rpc"
+const ETHEREUM_RPC = "https://eth.llamarpc.com" || process.env.ETHEREUM_RPC
+const ETHEREUM_SEPOLIA_RPC = "https://rpc.sepolia.org" || process.env.ETHEREUM_SEPOLIA_RPC
+const BASE_RPC = "https://mainnet.base.org" || process.env.BASE_RPC
+const BASE_GOERLI_RPC = "https://goerli.base.org" || process.env.BASE_GOERLI_RPC
+const POLYGON_MAINNET_RPC = "https://rpc-mainnet.maticvigil.com" || process.env.POLYGON_MAINNET_RPC
+const POLYGON_MUMBAI_RPC = "https://rpc-mumbai.maticvigil.com/" || process.env.POLYGON_MUMBAI_RPC
+const POLYGON_ZKEVM_TESTNET_RPC = "https://rpc.public.zkevm-test.net" || process.env.POLYGON_ZKEVM_TESTNET_RPC
+const POLYGON_ZKEVM_RPC = "https://zkevm-rpc.com" || process.env.POLYGON_ZKEVM_RPC
+const AVALANCHE_C_CHAIN_RPC = "https://api.avax.network/ext/bc/C/rpc" || process.env.AVALANCHE_C_CHAIN_RPC
+const AVALANCHE_FUJI_RPC = "https://api.avax-test.network/ext/bc/C/rpc" || process.env.AVALANCHE_FUJI_RPC
+const ARBITRUM_ONE_RPC = "https://arb1.arbitrum.io/rpc" || process.env.ARBITRUM_ONE_RPC
+const ARBITRUM_TESTNET_RPC = "https://goerli-rollup.arbitrum.io/rpc" || process.env.ARBITRUM_TESTNET_RPC
 
 const config: HardhatUserConfig = {
     etherscan: {
@@ -38,6 +40,22 @@ const config: HardhatUserConfig = {
             chainId: 11155111,
             live: true,
             saveDeployments: true,
+            gasMultiplier: 2,
+            accounts: [PRIVATE_KEY],
+        },
+        base: {
+            url: BASE_RPC,
+            chainId: 8453,
+            live: true,
+            saveDeployments: true,
+            accounts: [PRIVATE_KEY],
+        },
+        base_goerli: {
+            url: BASE_GOERLI_RPC,
+            chainId: 84531,
+            live: true,
+            saveDeployments: true,
+            gasMultiplier: 2,
             accounts: [PRIVATE_KEY],
         },
         polygon: {
@@ -67,6 +85,7 @@ const config: HardhatUserConfig = {
             chainId: 43113,
             live: true,
             saveDeployments: true,
+            gasMultiplier: 2,
             accounts: [PRIVATE_KEY],
         },
         zkevm: {

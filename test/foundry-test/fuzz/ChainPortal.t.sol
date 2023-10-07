@@ -27,13 +27,60 @@ contract ChainPortalTest is Test {
     uint64 public crossChainSelector = uint64(4444);
     uint32 public executionDelay = 6 hours;
 
-    function isNotAuthorizedLane(address sender, uint64 chainSelector, address[] memory targets)
+    function checkLanesAuthorization(address sender, uint64 chainSelector, address[] memory targets)
         internal
         view
         returns (bool)
     {
         for (uint256 i = 0; i < targets.length; i++) {
             if (!portal.isAuthorizedLane(sender, chainSelector, targets[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkArrayLenghts(
+        address[] memory targets,
+        uint256[] memory values,
+        string[] memory signatures,
+        bytes[] memory calldatas,
+        address[] memory tokens,
+        uint256[] memory amounts
+    ) internal pure returns (bool) {
+        return targets.length == values.length && values.length == signatures.length
+            && signatures.length == calldatas.length && tokens.length == amounts.length;
+    }
+
+    function setPortal(uint64 chainSelector) internal {
+        address[] memory portals = new address[](1);
+        uint64[] memory chainSelectors = new uint64[](1);
+        portals[0] = address(portal);
+        chainSelectors[0] = chainSelector;
+        vm.prank(governor);
+        portal.setChainPortals(chainSelectors, portals);
+    }
+
+    function setAuthorizedLanes(address sender, uint64 chainSelector, address[] memory targets, uint256 numAuthorized)
+        internal
+    {
+        address[] memory senders = new address[](numAuthorized);
+        uint64[] memory chainSelectors = new uint64[](numAuthorized);
+        address[] memory authorizedTargets = new address[](numAuthorized);
+        bool[] memory enableds = new bool[](numAuthorized);
+        for (uint256 i = 0; i < numAuthorized; i++) {
+            senders[i] = sender;
+            chainSelectors[i] = chainSelector;
+            authorizedTargets[i] = targets[i];
+            enableds[i] = true;
+        }
+        vm.prank(governor);
+        portal.setLanes(senders, chainSelectors, targets, enableds);
+    }
+
+    function containsZeroAddressAsTarget(address[] memory targets) internal pure returns (bool) {
+        for (uint256 i; i < targets.length; i++) {
+            if (targets[i] == address(0)) {
                 return true;
             }
         }
@@ -101,47 +148,25 @@ contract ChainPortalTest is Test {
         bytes[] memory calldatas,
         address[] memory tokens,
         uint256[] memory amounts,
-        bool authorizeAllLanes,
+        uint256 authorizeLanes,
         bool isPortalSet
     ) public {
+        bool zeroAddressTarget = containsZeroAddressAsTarget(targets);
         gasLimit = uint64(bound(gasLimit, 1, 2e6));
-        if (authorizeAllLanes && targets.length > 0) {
-            address[] memory senders = new address[](targets.length);
-            bool[] memory enableds = new bool[](targets.length);
-            uint64[] memory chainSelectors = new uint64[](targets.length);
-            for (uint256 i = 0; i < senders.length; i++) {
-                senders[i] = sender;
-                chainSelectors[i] = chainSelector;
-                enableds[i] = true;
-            }
-            vm.prank(governor);
-            bool zeroAddressTarget;
-            for (uint256 i; i < targets.length; i++) {
-                if (targets[i] == address(0)) {
-                    zeroAddressTarget = true;
-                    break;
-                }
-            }
-            if (!zeroAddressTarget) {
-                portal.setLanes(senders, chainSelectors, targets, enableds);
-            }
-        }
-        if (isPortalSet && targets.length > 0) {
-            address[] memory portals = new address[](1);
-            uint64[] memory chainSelectors = new uint64[](1);
-            portals[0] = address(portal);
-            chainSelectors[0] = chainSelector;
-            vm.prank(governor);
-            portal.setChainPortals(chainSelectors, portals);
-        }
-        if (isNotAuthorizedLane(sender, chainSelector, targets) && targets.length > 0) {
-            vm.expectRevert(ChainPortal.ChainPortal__LaneNotAvailable.selector);
-        } else if (
-            (
-                targets.length != values.length || values.length != signatures.length
-                    || signatures.length != calldatas.length || tokens.length != amounts.length
-            )
+        authorizeLanes = bound(authorizeLanes, 0, targets.length);
+        if (
+            authorizeLanes > 0 && checkArrayLenghts(targets, values, signatures, calldatas, tokens, amounts)
+                && !zeroAddressTarget
         ) {
+            setAuthorizedLanes(sender, chainSelector, targets, authorizeLanes);
+        }
+        if (isPortalSet) {
+            setPortal(chainSelector);
+        }
+
+        if (checkLanesAuthorization(sender, chainSelector, targets)) {
+            vm.expectRevert(ChainPortal.ChainPortal__LaneNotAvailable.selector);
+        } else if (!checkArrayLenghts(targets, values, signatures, calldatas, tokens, amounts)) {
             vm.expectRevert(ChainPortal.ChainPortal__ArrayLengthMismatch.selector);
         } else if (targets.length == 0) {
             vm.expectRevert(ChainPortal.ChainPortal__ZeroTargets.selector);

@@ -159,32 +159,6 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     // Internal Functions //
     ////////////////////////
 
-    /**
-     * @notice Executes the next pending action in the queue, skipping aborted actions.
-     * @dev If there is no pending action queued, the function will revert.
-     * @dev The first pending action that is not aborted will be executed.
-     */
-    function _executeNextPendingActionQueued() internal {
-        uint64 nextActionId = s_queueState.nextActionId;
-        DataTypes.ActionInfo storage actionInfo = s_actionInfos[nextActionId];
-        while (actionInfo.actionState == DataTypes.ActionState.ABORTED) {
-            unchecked {
-                ++nextActionId;
-            }
-            actionInfo = s_actionInfos[nextActionId];
-        }
-        if (actionInfo.actionState == DataTypes.ActionState.EMPTY) {
-            revert ChainPortal__NoActionQueued();
-        }
-        if (!_isActionExecutable(actionInfo.timestampQueued)) {
-            revert ChainPortal__ActionNotExecutable();
-        }
-        actionInfo.actionState = DataTypes.ActionState.EXECUTED;
-        s_queueState.nextActionId = nextActionId + 1;
-        _executeAction(s_actions[nextActionId]);
-        emit QueuedActionExecuted(nextActionId);
-    }
-
     /// @param action The CrossChainAction struct of the action to be executed
     function _executeAction(DataTypes.CrossChainAction memory action) internal {
         bool success;
@@ -211,6 +185,32 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
                 ++i;
             }
         }
+    }
+
+    /**
+     * @notice Executes the next pending action in the queue, skipping aborted actions.
+     * @dev If there is no pending action queued, the function will revert.
+     * @dev The first pending action that is not aborted will be executed.
+     */
+    function _executeNextPendingActionQueued() internal {
+        uint64 nextActionId = s_queueState.nextActionId;
+        DataTypes.ActionInfo storage actionInfo = s_actionInfos[nextActionId];
+        while (actionInfo.actionState == DataTypes.ActionState.ABORTED) {
+            unchecked {
+                ++nextActionId;
+            }
+            actionInfo = s_actionInfos[nextActionId];
+        }
+        if (actionInfo.actionState == DataTypes.ActionState.EMPTY) {
+            revert ChainPortal__NoActionQueued();
+        }
+        if (!_isActionExecutable(actionInfo.timestampQueued)) {
+            revert ChainPortal__ActionNotExecutable();
+        }
+        actionInfo.actionState = DataTypes.ActionState.EXECUTED;
+        s_queueState.nextActionId = nextActionId + 1;
+        _executeAction(s_actions[nextActionId]);
+        emit QueuedActionExecuted(nextActionId);
     }
 
     /// @param actionId The ID of the action to be aborted
@@ -367,16 +367,11 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
      * @param chainSelector Selector of the destination chain.
      * @param targets Array of target addresses.
      * @notice Revert if the action includes targets on destination chains with no lanes available from this portal for msg.sender.
-     * @notice Save gas by skipping storage loads if equal targets are in sequence.
      */
     function _revertIfUnauthorizedLanes(uint64 chainSelector, address[] memory targets) private view {
-        address tempTarget;
-        for (uint256 i; i < targets.length; i++) {
-            if (targets[i] != tempTarget) {
-                tempTarget = targets[i];
-                if (!s_lanes[msg.sender][chainSelector][tempTarget]) {
-                    revert ChainPortal__LaneNotAvailable();
-                }
+        for (uint256 i; i < targets.length;) {
+            if (!s_lanes[msg.sender][chainSelector][targets[i]]) {
+                revert ChainPortal__LaneNotAvailable();
             }
             unchecked {
                 ++i;

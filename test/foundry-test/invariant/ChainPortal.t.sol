@@ -79,11 +79,6 @@ contract ChainPortalTest is Test {
         portals[0] = cc_portal;
         vm.prank(governor);
         portal.setChainPortals(chainSelectors, portals);
-        Client.Any2EVMMessage memory message = buildMessageWithSingleAction(
-            bob, cc_portal, crossChainSelector, address(linkToken), 0, "approve(address,uint256)", abi.encode(bob, 100)
-        );
-        vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
         targetSender(address(ccipRouter));
         targetSender(governor);
         targetContract(address(portal));
