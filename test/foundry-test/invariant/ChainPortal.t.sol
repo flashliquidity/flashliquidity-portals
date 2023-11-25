@@ -4,8 +4,9 @@ pragma solidity 0.8.19;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
-import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
+import {GovernorPortal} from "../../../contracts/GovernorPortal.sol";
+import {CrossChainGovernorPortal} from "../../../contracts/CrossChainGovernorPortal.sol";
+import {ChainPortal, Portal} from "../../../contracts/ChainPortal.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
@@ -14,7 +15,9 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 
 contract ChainPortalTest is Test {
-    BaseChainPortal public portal;
+    GovernorPortal public governorPortal;
+    CrossChainGovernorPortal public crossChainPortal;
+    CrossChainGovernorPortal public crossChainPortal2;
     CcipRouterMock public ccipRouter;
     ERC20Mock public linkToken;
     address public governor = makeAddr("governor");
@@ -22,80 +25,58 @@ contract ChainPortalTest is Test {
     address public bob = makeAddr("bob");
     address public alice = makeAddr("alice");
     address public rob = makeAddr("rob");
-    address public cc_portal = makeAddr("cc_portal");
 
-    uint64 public baseChainSelector = uint64(block.chainid);
-    uint64 public crossChainSelector = uint64(4444);
-    uint32 public executionDelay = 6 hours;
-    uint64 public gasLimit = 1e6;
+    uint64 public governorChainSelector = uint64(block.chainid);
+    uint64 public crossChainSelector = 4444;
+    uint32 public executionDelay = 4 hours;
 
     bytes ChainPortal__InvalidChain =
-        abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, uint64(block.chainid));
-
-    function buildMessageWithSingleAction(
-        address sender,
-        address senderPortal,
-        uint64 sourceChainSelector,
-        address target,
-        uint256 value,
-        string memory signature,
-        bytes memory callData
-    ) internal pure returns (Client.Any2EVMMessage memory) {
-        address[] memory targets = new address[](1);
-        uint256[] memory values = new uint256[](1);
-        string[] memory signatures = new string[](1);
-        bytes[] memory calldatas = new bytes[](1);
-        targets[0] = target;
-        signatures[0] = signature;
-        calldatas[0] = callData;
-        values[0] = value;
-        DataTypes.CrossChainAction memory action =
-            DataTypes.CrossChainAction(sender, targets, values, signatures, calldatas);
-        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
-        Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
-            bytes32(uint256(0x01)), sourceChainSelector, abi.encode(senderPortal), abi.encode(action), tokenAmounts
-        );
-        return message;
-    }
+        abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, crossChainSelector);
 
     function setUp() public {
-        vm.warp(1696969691);
         vm.prank(governor);
         linkToken = new ERC20Mock("LINK","LINK", 1000000);
+        uint64[] memory supportedChains = new uint64[](2);
+        supportedChains[0] = governorChainSelector;
+        supportedChains[1] = crossChainSelector;
         ccipRouter = new CcipRouterMock(
             address(linkToken),
-            uint64(block.chainid)
+            uint64(block.chainid),
+            supportedChains
         );
-        portal = new BaseChainPortal(
+        governorPortal = new GovernorPortal(
             governor,
             guardian,
             address(ccipRouter),
             address(linkToken),
+            governorChainSelector,
             executionDelay
         );
-        uint64[] memory chainSelectors = new uint64[](1);
-        address[] memory portals = new address[](1);
-        chainSelectors[0] = crossChainSelector;
-        portals[0] = cc_portal;
-        vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
-        targetSender(address(ccipRouter));
-        targetSender(governor);
-        targetContract(address(portal));
+        crossChainPortal = new CrossChainGovernorPortal(
+            governor,
+            guardian,
+            address(ccipRouter),
+            address(linkToken),
+            crossChainSelector,
+            governorChainSelector,
+            0,
+            address(governorPortal),
+            executionDelay
+        );
     }
 
     // coverage skip workaround
     function test() public {}
 
     function invariant__LastActionIdIsAlwaysGreaterOrEqualNextActionId() public {
-        (uint64 nextActionId, uint64 lastActionId,) = portal.getActionQueueState();
+        (uint64 nextActionId, uint64 lastActionId,,) = governorPortal.getPortalState();
         assertTrue(lastActionId >= nextActionId);
     }
 
     function invariant__ExpectedActionState() public {
-        (uint64 nextActionId, uint64 lastActionId,) = portal.getActionQueueState();
-        (,, uint8 lastActionState) = portal.getActionInfoById(lastActionId);
-        (,, uint8 nextActionState) = portal.getActionInfoById(nextActionId);
+        (uint64 nextActionId, uint64 lastActionId,,) = governorPortal.getPortalState();
+        (, uint8 lastActionState) = governorPortal.getActionSetInfoById(lastActionId);
+        (, uint8 nextActionState) = governorPortal.getActionSetInfoById(nextActionId);
         if (lastActionId == 0 || lastActionId == nextActionId) {
             assertTrue(nextActionState == 0);
         } else if (lastActionId == nextActionId) {

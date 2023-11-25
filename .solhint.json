@@ -2,6 +2,9 @@
   "extends": "solhint:recommended",
   "rules": {
     "compiler-version": ["error", "^0.8.0"],
+		"var-name-mixedcase": "off",
+		"immutable-vars-naming": "off",
+		"no-inline-assembly": "off",
     "func-visibility": ["warn", { "ignoreConstructors": true }]
   }
 }

@@ -4,16 +4,20 @@ pragma solidity 0.8.19;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {BaseChainPortal} from "../../../contracts/BaseChainPortal.sol";
-import {ChainPortal, DataTypes} from "../../../contracts/ChainPortal.sol";
+import {GovernorPortal} from "../../../contracts/GovernorPortal.sol";
+import {CrossChainGovernorPortal} from "../../../contracts/CrossChainGovernorPortal.sol";
+import {Portal, ChainPortal} from "../../../contracts/ChainPortal.sol";
 import {Governable} from "flashliquidity-acs/contracts/Governable.sol";
 import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
 import {ERC20Mock} from "../../mocks/ERC20Mock.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import "forge-std/console.sol";
 
 contract ChainPortalTest is Test {
-    BaseChainPortal public portal;
+    GovernorPortal public governorPortal;
+    CrossChainGovernorPortal public crossChainPortal;
+    CrossChainGovernorPortal public crossChainPortal2;
     CcipRouterMock public ccipRouter;
     ERC20Mock public linkToken;
     address public governor = makeAddr("governor");
@@ -21,189 +25,114 @@ contract ChainPortalTest is Test {
     address public bob = makeAddr("bob");
     address public alice = makeAddr("alice");
     address public rob = makeAddr("rob");
-    address public cc_portal = makeAddr("cc_portal");
 
-    uint64 public baseChainSelector = uint64(block.chainid);
-    uint64 public crossChainSelector = uint64(4444);
-    uint32 public executionDelay = 6 hours;
+    uint64 public governorChainSelector = uint64(block.chainid);
+    uint64 public crossChainSelector = 4444;
+    uint32 public executionDelay = 4 hours;
 
-    function checkLanesAuthorization(address sender, uint64 chainSelector, address[] memory targets)
-        internal
-        view
-        returns (bool)
-    {
-        for (uint256 i = 0; i < targets.length; i++) {
-            if (!portal.isAuthorizedLane(sender, chainSelector, targets[i])) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function checkArrayLenghts(
-        address[] memory targets,
-        uint256[] memory values,
-        string[] memory signatures,
-        bytes[] memory calldatas,
-        address[] memory tokens,
-        uint256[] memory amounts
-    ) internal pure returns (bool) {
-        return targets.length == values.length && values.length == signatures.length
-            && signatures.length == calldatas.length && tokens.length == amounts.length;
-    }
-
-    function setPortal(uint64 chainSelector) internal {
-        address[] memory portals = new address[](1);
-        uint64[] memory chainSelectors = new uint64[](1);
-        portals[0] = address(portal);
-        chainSelectors[0] = chainSelector;
-        vm.prank(governor);
-        portal.setChainPortals(chainSelectors, portals);
-    }
-
-    function setAuthorizedLanes(address sender, uint64 chainSelector, address[] memory targets, uint256 numAuthorized)
-        internal
-    {
-        address[] memory senders = new address[](numAuthorized);
-        uint64[] memory chainSelectors = new uint64[](numAuthorized);
-        address[] memory authorizedTargets = new address[](numAuthorized);
-        bool[] memory enableds = new bool[](numAuthorized);
-        for (uint256 i = 0; i < numAuthorized; i++) {
-            senders[i] = sender;
-            chainSelectors[i] = chainSelector;
-            authorizedTargets[i] = targets[i];
-            enableds[i] = true;
-        }
-        vm.prank(governor);
-        portal.setLanes(senders, chainSelectors, targets, enableds);
-    }
-
-    function containsZeroAddressAsTarget(address[] memory targets) internal pure returns (bool) {
-        for (uint256 i; i < targets.length; i++) {
-            if (targets[i] == address(0)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function buildMessage(
-        bytes32 messageId,
-        address chainPortal,
-        uint64 sourceChainSelector,
-        address[] memory targets,
-        uint256[] memory values,
-        string[] memory signatures,
-        bytes[] memory calldatas,
-        address[] memory tokens,
-        uint256[] memory amounts
-    ) public view returns (Client.Any2EVMMessage memory) {
-        DataTypes.CrossChainAction memory action = DataTypes.CrossChainAction({
-            sender: msg.sender,
-            targets: targets,
-            values: values,
-            signatures: signatures,
-            calldatas: calldatas
-        });
-        Client.EVMTokenAmount[] memory tokensData = new Client.EVMTokenAmount[](tokens.length);
-        for (uint256 i; i < tokens.length;) {
-            tokensData[i].token = tokens[i];
-            tokensData[i].amount = amounts[i];
-            unchecked {
-                ++i;
-            }
-        }
-        return Client.Any2EVMMessage({
-            messageId: messageId,
-            sender: abi.encode(chainPortal),
-            sourceChainSelector: sourceChainSelector,
-            data: abi.encode(action),
-            destTokenAmounts: tokensData
-        });
-    }
+    bytes ChainPortal__InvalidChain =
+        abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, crossChainSelector);
 
     function setUp() public {
         vm.prank(governor);
         linkToken = new ERC20Mock("LINK","LINK", 1000000);
+        uint64[] memory supportedChains = new uint64[](2);
+        supportedChains[0] = governorChainSelector;
+        supportedChains[1] = crossChainSelector;
         ccipRouter = new CcipRouterMock(
             address(linkToken),
-            uint64(block.chainid)
+            uint64(block.chainid),
+            supportedChains
         );
-        portal = new BaseChainPortal(
+        governorPortal = new GovernorPortal(
             governor,
             guardian,
             address(ccipRouter),
             address(linkToken),
+            governorChainSelector,
+            executionDelay
+        );
+        uint64[] memory destChainSelectors = new uint64[](1);
+        uint64[] memory routeChainSelectors = new uint64[](1);
+        address[] memory portals = new address[](1);
+        destChainSelectors[0] = governorChainSelector;
+        routeChainSelectors[0] = governorChainSelector;
+        portals[0] = address(governorPortal);
+
+        crossChainPortal = new CrossChainGovernorPortal(
+            governor,
+            guardian,
+            address(ccipRouter),
+            address(linkToken),
+            crossChainSelector,
+            governorChainSelector,
+            0,
+            address(governorPortal),
             executionDelay
         );
     }
 
     function testFuzzTeleport(
         address sender,
-        uint64 chainSelector,
-        uint64 gasLimit,
+        uint64 destChainSelector,
         address[] memory targets,
         uint256[] memory values,
         string[] memory signatures,
         bytes[] memory calldatas,
         address[] memory tokens,
         uint256[] memory amounts,
-        uint256 authorizeLanes,
-        bool isPortalSet
+        bool isPortalController
     ) public {
-        bool zeroAddressTarget = containsZeroAddressAsTarget(targets);
-        gasLimit = uint64(bound(gasLimit, 1, 2e6));
-        authorizeLanes = bound(authorizeLanes, 0, targets.length);
-        if (
-            authorizeLanes > 0 && checkArrayLenghts(targets, values, signatures, calldatas, tokens, amounts)
-                && !zeroAddressTarget
+        if (isPortalController) {
+            sender = governor;
+        }
+        vm.startPrank(sender);
+        (uint64 routeChainSelector, address routePortal) = governorPortal.getRoute(destChainSelector);
+        if (!isPortalController) {
+            vm.expectRevert(ChainPortal.ChainPortal__NotPortalController.selector);
+        } else if (
+            targets.length != values.length || values.length != signatures.length
+                || signatures.length != calldatas.length || tokens.length != amounts.length
         ) {
-            setAuthorizedLanes(sender, chainSelector, targets, authorizeLanes);
+            vm.expectRevert(ChainPortal.ChainPortal__InconsistentParamsLength.selector);
+        } else if (routeChainSelector == 0 || routePortal == address(0)) {
+            vm.expectRevert(abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, destChainSelector));
         }
-        if (isPortalSet) {
-            setPortal(chainSelector);
-        }
-
-        if (checkLanesAuthorization(sender, chainSelector, targets)) {
-            vm.expectRevert(ChainPortal.ChainPortal__LaneNotAvailable.selector);
-        } else if (!checkArrayLenghts(targets, values, signatures, calldatas, tokens, amounts)) {
-            vm.expectRevert(ChainPortal.ChainPortal__ArrayLengthMismatch.selector);
-        } else if (targets.length == 0) {
-            vm.expectRevert(ChainPortal.ChainPortal__ZeroTargets.selector);
-        } else if (portal.getPortal(chainSelector) == address(0)) {
-            vm.expectRevert(abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, chainSelector));
-        }
-        vm.prank(sender);
-        portal.teleport(chainSelector, gasLimit, targets, values, signatures, calldatas, tokens, amounts);
+        governorPortal.teleport(
+            destChainSelector, targets, values, signatures, calldatas, tokens, amounts, new bytes(0)
+        );
+        vm.stopPrank();
     }
 
     function testFuzzCcipReceive(
         bytes32 messageId,
-        uint64 sourceChainSelector,
-        address sourcePortal,
-        DataTypes.CrossChainAction memory action,
-        bool isChainPortalSet,
-        bool isAuthorizedSourcePortal
+        uint64 senderChainSelector,
+        address senderPortal,
+        Portal.ActionSetHeader memory actionSetHeader,
+        Portal.ActionSet memory actionSet
     ) public {
-        vm.assume(sourceChainSelector != 0);
-        vm.assume(sourcePortal != address(0));
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
-            messageId, sourceChainSelector, abi.encode(sourcePortal), abi.encode(action), new Client.EVMTokenAmount[](0)
+            messageId,
+            senderChainSelector,
+            abi.encode(senderPortal),
+            abi.encode(actionSetHeader, actionSet),
+            new Client.EVMTokenAmount[](0)
         );
-        if (isChainPortalSet) {
-            uint64[] memory chainSelectors = new uint64[](1);
-            address[] memory portals = new address[](1);
-            chainSelectors[0] = sourceChainSelector;
-            portals[0] = isAuthorizedSourcePortal ? sourcePortal : rob;
-            vm.prank(address(governor));
-            portal.setChainPortals(chainSelectors, portals);
-            if (!isAuthorizedSourcePortal) {
-                vm.expectRevert(ChainPortal.ChainPortal__InvalidPortal.selector);
-            }
-        } else {
-            vm.expectRevert(abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, sourceChainSelector));
+        (uint64 routeChainSelector, address routePortal) = governorPortal.getRoute(senderChainSelector);
+        if (routeChainSelector == 0 || routePortal == address(0)) {
+            vm.expectRevert(abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, senderChainSelector));
+        } else if (senderPortal != routePortal) {
+            vm.expectRevert(ChainPortal.ChainPortal__InvalidPortal.selector);
         }
         vm.prank(address(ccipRouter));
-        portal.ccipReceive(message);
+        governorPortal.ccipReceive(message);
+    }
+
+    function test_GettersCantRevert(uint64 actionId, uint64 chainSelector) public view {
+        governorPortal.getActionSetById(actionId);
+        governorPortal.getActionSetInfoById(actionId);
+        governorPortal.getRoute(chainSelector);
+        governorPortal.getPortalState();
+        governorPortal.checkUpkeep(new bytes(0));
     }
 }

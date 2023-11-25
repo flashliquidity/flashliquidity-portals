@@ -1,6 +1,6 @@
 # FlashLiquidity Portals
 
-FlashLiquidity cross-chain interoperability and governance executors contracts
+Cross-chain governance portals
 
 ## Requirements
 

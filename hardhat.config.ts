@@ -25,7 +25,53 @@ const ARBITRUM_TESTNET_RPC = "https://goerli-rollup.arbitrum.io/rpc" || process.
 
 const config: HardhatUserConfig = {
     etherscan: {
-        apiKey: process.env.ETHERSCAN_API_KEY,
+        apiKey: {
+            mainnet: process.env.ETHERSCAN_API_KEY,
+            sepolia: process.env.ETHERSCAN_API_KEY,
+            polygon: process.env.POLYGONSCAN_API_KEY,
+            polygonMumbai: process.env.POLYGONSCAN_API_KEY,
+            zkevm: process.env.ZKEVMSCAN_API_KEY,
+            zkevm_testnet: process.env.ZKEVMSCAN_API_KEY,
+            base: process.env.BASESCAN_API_KEY,
+            base_goerli: process.env.BASESCAN_API_KEY,
+            avalanche: process.env.SNOWTRACE_API_KEY,
+            avalancheFujiTestnet: process.env.SNOWTRACE_API_KEY
+        },
+        customChains: [
+
+            {
+                network: "base",
+                chainId: 8453,
+                urls: {
+                    apiURL: "https://api.basescan.org/api",
+                    browserURL: "https://basescan.org"
+                }
+            },
+            {
+                network: "base_goerli",
+                chainId: 84531,
+                urls: {
+                    apiURL: "https://api-goerli.basescan.org/api",
+                    browserURL: "https://goerli.basescan.org"
+                }
+            },
+            {
+                network: "zkevm",
+                chainId: 1101,
+                urls: {
+                    apiURL: "https://api-zkevm.polygonscan.com/api",
+                    browserURL: "https://zkevm.polygonscan.com/"
+                }
+            },
+            {
+                network: "zkevm_testnet",
+                chainId: 1442,
+                urls: {
+                    apiURL: "https://api-zkevm.polygonscan.com/api",
+                    browserURL: "https://zkevm.polygonscan.com/"
+                }
+            }
+        ]
     },
     networks: {
         ethereum: {
@@ -55,7 +101,7 @@ const config: HardhatUserConfig = {
             chainId: 84531,
             live: true,
             saveDeployments: true,
-            gasMultiplier: 2,
+            gasMultiplier: 3,
             accounts: [PRIVATE_KEY],
         },
         polygon: {

@@ -1,6 +1,6 @@
 {
   "name": "flashliquidity-portals",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "repository": "https://github.com/flashliquidity/flashliquidity-portals.git",
   "scripts": {
@@ -10,19 +10,19 @@
     "unit-test": "forge test --nmt 'testFuzz|invariant'",
     "fuzz-test": "forge test --mt testFuzz",
     "invariant-test": "forge test --mt invariant",
-    "coverage": "forge coverage",
+    "coverage": "forge coverage --report summary --report lcov",
     "gas-report": "forge snapshot --gas-report",
     "slither": "slither .",
     "lint": "solhint 'contracts/*.sol'",
     "lint-fix": "solhint 'contracts/**/*.sol' --fix",
-    "format": "forge fmt contracts/*.sol && forge fmt contracts/**/*.sol && forge fmt test/foundry-test/**/*.sol",
+    "format": "forge fmt contracts/*.sol && forge fmt contracts/**/*.sol && forge fmt test/foundry-test/**/*.sol test/helpers/*.sol",
     "format-check": "forge fmt --check"
   },
   "dependencies": {
-    "@chainlink/contracts": "^0.6.1",
+    "@chainlink/contracts": "^0.8.0",
     "@chainlink/contracts-ccip": "^0.7.6",
     "@openzeppelin/contracts": "4.9.3",
-    "flashliquidity-acs": "0.0.4"
+    "flashliquidity-acs": "0.0.7"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",
@@ -31,14 +31,12 @@
     "@types/node": "^18.7.18",
     "dotenv": "^16.0.0",
     "ethers": "^5.7.2",
-    "hardhat": "^2.17.0",
+    "hardhat": "^2.19.1",
     "hardhat-deploy": "^0.11.15",
     "hardhat-deploy-ethers": "^0.3.0-beta.13",
     "import-toml": "^1.0.0",
-    "prettier": "^2.5.1",
-    "prettier-plugin-solidity": "^1.0.0-beta.19",
-    "solhint": "^3.3.6",
-    "solhint-plugin-prettier": "^0.0.5",
+    "solhint": "^4.0.0",
+    "solhint-plugin-prettier": "^0.1.0",
     "ts-node": "^10.9.1",
     "typescript": "^4.8.3"
   }
