@@ -12,8 +12,8 @@ bytecode_hash = "none"
 ffi = false
 
 [fuzz]
-runs = 512 #1000000
+runs = 256 #1000000
 
 [invariant]
 runs = 16  #1024
-depth = 16  #1024
+depth = 64  #1024

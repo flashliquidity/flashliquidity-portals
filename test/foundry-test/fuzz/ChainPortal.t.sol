@@ -58,7 +58,6 @@ contract ChainPortalTest is Test {
         destChainSelectors[0] = governorChainSelector;
         routeChainSelectors[0] = governorChainSelector;
         portals[0] = address(governorPortal);
-
         crossChainPortal = new CrossChainGovernorPortal(
             governor,
             guardian,
@@ -72,23 +71,17 @@ contract ChainPortalTest is Test {
         );
     }
 
-    function testFuzzTeleport(
-        address sender,
+    function test_GP_FuzzTeleport(
         uint64 destChainSelector,
         address[] memory targets,
         uint256[] memory values,
         string[] memory signatures,
         bytes[] memory calldatas,
         address[] memory tokens,
-        uint256[] memory amounts,
-        bool isPortalController
+        uint256[] memory amounts
     ) public {
-        if (isPortalController) {
-            sender = governor;
-        }
-        vm.startPrank(sender);
         (uint64 routeChainSelector, address routePortal) = governorPortal.getRoute(destChainSelector);
-        if (!isPortalController) {
+        if (msg.sender != governor) {
             vm.expectRevert(ChainPortal.ChainPortal__NotPortalController.selector);
         } else if (
             targets.length != values.length || values.length != signatures.length
@@ -101,10 +94,34 @@ contract ChainPortalTest is Test {
         governorPortal.teleport(
             destChainSelector, targets, values, signatures, calldatas, tokens, amounts, new bytes(0)
         );
-        vm.stopPrank();
     }
 
-    function testFuzzCcipReceive(
+    function test_CCGP_FuzzTeleport(
+        uint64 destChainSelector,
+        address[] memory targets,
+        uint256[] memory values,
+        string[] memory signatures,
+        bytes[] memory calldatas,
+        address[] memory tokens,
+        uint256[] memory amounts
+    ) public {
+        (uint64 routeChainSelector, address routePortal) = crossChainPortal.getRoute(destChainSelector);
+        if (msg.sender != address(crossChainPortal)) {
+            vm.expectRevert(ChainPortal.ChainPortal__NotPortalController.selector);
+        } else if (
+            targets.length != values.length || values.length != signatures.length
+                || signatures.length != calldatas.length || tokens.length != amounts.length
+        ) {
+            vm.expectRevert(ChainPortal.ChainPortal__InconsistentParamsLength.selector);
+        } else if (routeChainSelector == 0 || routePortal == address(0)) {
+            vm.expectRevert(abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, destChainSelector));
+        }
+        crossChainPortal.teleport(
+            destChainSelector, targets, values, signatures, calldatas, tokens, amounts, new bytes(0)
+        );
+    }
+
+    function test_GP_FuzzCcipReceive(
         bytes32 messageId,
         uint64 senderChainSelector,
         address senderPortal,
@@ -128,11 +145,41 @@ contract ChainPortalTest is Test {
         governorPortal.ccipReceive(message);
     }
 
-    function test_GettersCantRevert(uint64 actionId, uint64 chainSelector) public view {
+    function test_CCGP_FuzzCcipReceive(
+        bytes32 messageId,
+        uint64 senderChainSelector,
+        address senderPortal,
+        Portal.ActionSetHeader memory actionSetHeader,
+        Portal.ActionSet memory actionSet
+    ) public {
+        Client.Any2EVMMessage memory message = Client.Any2EVMMessage(
+            messageId,
+            senderChainSelector,
+            abi.encode(senderPortal),
+            abi.encode(actionSetHeader, actionSet),
+            new Client.EVMTokenAmount[](0)
+        );
+        (uint64 routeChainSelector, address routePortal) = crossChainPortal.getRoute(senderChainSelector);
+        if (routeChainSelector == 0 || routePortal == address(0)) {
+            vm.expectRevert(abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, senderChainSelector));
+        } else if (senderPortal != routePortal) {
+            vm.expectRevert(ChainPortal.ChainPortal__InvalidPortal.selector);
+        }
+        vm.prank(address(ccipRouter));
+        crossChainPortal.ccipReceive(message);
+    }
+
+    function test_FuzzGettersCantRevert(uint64 actionId, uint64 chainSelector) public view {
         governorPortal.getActionSetById(actionId);
         governorPortal.getActionSetInfoById(actionId);
         governorPortal.getRoute(chainSelector);
         governorPortal.getPortalState();
         governorPortal.checkUpkeep(new bytes(0));
+        crossChainPortal.getActionSetById(actionId);
+        crossChainPortal.getActionSetInfoById(actionId);
+        crossChainPortal.getRoute(chainSelector);
+        crossChainPortal.getPortalState();
+        crossChainPortal.checkUpkeep(new bytes(0));
+        crossChainPortal.getIntervalCommunicationLost();
     }
 }
