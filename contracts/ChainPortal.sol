@@ -75,6 +75,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         uint64[] indexed chainSelectors, uint64[] indexed routeChainSelectors, address[] indexed routePortals
     );
     event RoutingExtraArgsChanged(bytes indexed extraArgs);
+    event ActionOriginsChanged(address[] indexed origins, uint64[] indexed chainSelectors, bool[] indexed authorizeds);
 
     ///////////////////////
     // Modifiers         //
@@ -175,8 +176,8 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
             extraArgs: route.chainSelector == destChainSelector ? ccipExtraArgs : s_routingCcipExtraArgs,
             feeToken: i_linkToken
         });
-        bytes32 _messageId = IRouterClient(i_router).ccipSend(route.chainSelector, message);
-        emit ActionSetSent(_messageId);
+        bytes32 messageId = IRouterClient(i_router).ccipSend(route.chainSelector, message);
+        emit ActionSetSent(messageId);
     }
 
     /// @inheritdoc IChainPortal
@@ -308,7 +309,8 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
                 extraArgs: route.chainSelector == destChainSelector ? ccipExtraArgs : s_routingCcipExtraArgs,
                 feeToken: address(i_linkToken)
             });
-            IRouterClient(i_router).ccipSend(route.chainSelector, forwardedMsg);
+            bytes32 messageId = IRouterClient(i_router).ccipSend(route.chainSelector, forwardedMsg);
+            emit ActionSetForwarded(msg2Forward.messageId, messageId);
         }
     }
 
@@ -448,6 +450,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
                 ++i;
             }
         }
+        emit ActionOriginsChanged(origins, srcChainSelectors, authorizeds);
     }
 
     /////////////////////////////

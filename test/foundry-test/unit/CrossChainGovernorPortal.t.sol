@@ -14,7 +14,6 @@ import {ERC20Mock} from "../../mocks/ERC20Mock.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import {PortalHelpers} from "../../helpers/PortalHelpers.sol";
-import "forge-std/console.sol";
 
 contract CrossChainGovernorPortalTest is Test, PortalHelpers {
     GovernorPortal public governorPortal;

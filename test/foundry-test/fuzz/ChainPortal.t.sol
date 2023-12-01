@@ -12,7 +12,6 @@ import {Guardable} from "flashliquidity-acs/contracts/Guardable.sol";
 import {CcipRouterMock} from "../../mocks/CcipRouterMock.sol";
 import {ERC20Mock} from "../../mocks/ERC20Mock.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
-import "forge-std/console.sol";
 
 contract ChainPortalTest is Test {
     GovernorPortal public governorPortal;
@@ -29,9 +28,6 @@ contract ChainPortalTest is Test {
     uint64 public governorChainSelector = uint64(block.chainid);
     uint64 public crossChainSelector = 4444;
     uint32 public executionDelay = 4 hours;
-
-    bytes ChainPortal__InvalidChain =
-        abi.encodeWithSelector(ChainPortal.ChainPortal__InvalidChain.selector, crossChainSelector);
 
     function setUp() public {
         vm.prank(governor);

@@ -16,7 +16,6 @@ import {ChainPortal} from "./ChainPortal.sol";
  */
 
 contract GovernorPortal is Governable, Guardable, ChainPortal {
-    event ActionOriginsChanged(address[] indexed origins, uint64[] indexed chainSelectors, bool[] indexed authorizeds);
 
     constructor(
         address governor,
