@@ -14,9 +14,7 @@ import {ChainPortal} from "./ChainPortal.sol";
  * @notice This contract send/receive actions sets to/from CrossChainGovernorPortals.
  * @notice This contract is used to extend governance to cross-chain contracts.
  */
-
 contract GovernorPortal is Governable, Guardable, ChainPortal {
-
     constructor(
         address governor,
         address guardian,

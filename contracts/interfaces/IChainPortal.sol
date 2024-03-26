@@ -39,6 +39,14 @@ interface IChainPortal {
     ) external;
 
     /**
+     * @dev Transfer ERC20 tokens from the portal.
+     * @param to The address to which the tokens will be sent.
+     * @param tokens Array of token addresses to be sent.
+     * @param amounts An array of amounts for each token to be transferred. The array index corresponds to the token address in the 'tokens' array.
+     */
+    function transferTokens(address to, address[] memory tokens, uint256[] memory amounts) external;
+
+    /**
      * @dev Sends a cross-chain action and/or bridges tokens to another portal on destination chain.
      * @param destChainSelector Chain selector of the destination chain
      * @param targets Array of target addresses to interact with

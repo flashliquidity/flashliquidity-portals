@@ -34,23 +34,14 @@ contract CrossChainGovernorPortalTest is Test, PortalHelpers {
 
     function setUp() public {
         vm.prank(governor);
-        linkToken = new ERC20Mock("LINK","LINK", 1000000);
+        linkToken = new ERC20Mock("LINK", "LINK", 1000000);
         uint64[] memory supportedChains = new uint64[](3);
         supportedChains[0] = governorChainSelector;
         supportedChains[1] = crossChainSelector;
         supportedChains[2] = crossChainSelector2;
-        ccipRouter = new CcipRouterMock(
-            address(linkToken),
-            crossChainSelector,
-            supportedChains
-        );
+        ccipRouter = new CcipRouterMock(address(linkToken), crossChainSelector, supportedChains);
         governorPortal = new GovernorPortal(
-            governor,
-            guardian,
-            address(ccipRouter),
-            address(linkToken),
-            governorChainSelector,
-            executionDelay
+            governor, guardian, address(ccipRouter), address(linkToken), governorChainSelector, executionDelay
         );
 
         crossChainPortal = new CrossChainGovernorPortal(

@@ -18,7 +18,6 @@ import {Portal} from "./libraries/Portal.sol";
  * @author Oddcod3 (@oddcod3)
  * @dev Abstract contract implementing core functionalities for a chain portal, including action set execution, token bridging, and multi-hop routing.
  */
-
 abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibleInterface, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -64,18 +63,16 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     // Events            //
     ///////////////////////
 
-    event ExecutionDelayChanged(uint64 indexed executionDelay);
-    event ActionSetSent(bytes32 indexed messageId);
-    event ActionSetExecuted(uint256 indexed actionId);
-    event ActionSetForwarded(bytes32 indexed inboundMessageId, bytes32 indexed outboundMessageId);
-    event ActionSetRejected(bytes32 indexed messageId);
-    event ActionSetReceived(uint256 indexed actionId, bytes32 indexed messageId);
-    event ActionSetAborted(uint256 indexed actionId);
-    event RoutesChanged(
-        uint64[] indexed chainSelectors, uint64[] indexed routeChainSelectors, address[] indexed routePortals
-    );
-    event RoutingExtraArgsChanged(bytes indexed extraArgs);
-    event ActionOriginsChanged(address[] indexed origins, uint64[] indexed chainSelectors, bool[] indexed authorizeds);
+    event ExecutionDelayChanged(uint64 executionDelay);
+    event ActionSetSent(bytes32 messageId);
+    event ActionSetExecuted(uint256 actionId);
+    event ActionSetForwarded(bytes32 inboundMessageId, bytes32 outboundMessageId);
+    event ActionSetRejected(bytes32 messageId);
+    event ActionSetReceived(uint256 actionId, bytes32 messageId);
+    event ActionSetAborted(uint256 actionId);
+    event RoutesChanged(uint64[] chainSelectors, uint64[] routeChainSelectors, address[] routePortals);
+    event RoutingExtraArgsChanged(bytes extraArgs);
+    event ActionOriginsChanged(address[] origins, uint64[] chainSelectors, bool[] authorizeds);
 
     ///////////////////////
     // Modifiers         //
@@ -100,17 +97,28 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     {
         i_chainSelector = chainSelector;
         i_linkToken = linkToken;
+        _setExecutionDelay(executionDelay);
         IERC20(linkToken).approve(ccipRouter, type(uint256).max);
-        s_portalState.executionDelay = executionDelay;
     }
 
     ////////////////////////
     // External Functions //
     ////////////////////////
 
+    receive() external payable {}
+
     /// @inheritdoc IChainPortal
     function abortAction(uint64 actionId) external onlyAuthorizedActionAbort {
-        _abortAction(actionId);
+        Portal.State memory portalState = s_portalState;
+        if (actionId < portalState.nextActionId || actionId >= portalState.lastActionId) {
+            revert ChainPortal__InvalidActionSetId(actionId);
+        }
+        Portal.ActionSetInfo storage actionInfo = s_actionInfos[actionId];
+        if (actionInfo.actionState != Portal.ActionState.PENDING) {
+            revert ChainPortal__ActionSetNotPending(actionId);
+        }
+        actionInfo.actionState = Portal.ActionState.ABORTED;
+        emit ActionSetAborted(actionId);
     }
 
     /// @inheritdoc IChainPortal
@@ -120,7 +128,8 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
 
     /// @inheritdoc IChainPortal
     function setRoutingCcipExtraArgs(bytes memory routingCcipExtraArgs) external onlyPortalController {
-        _setRoutingCcipExtraArgs(routingCcipExtraArgs);
+        s_routingCcipExtraArgs = routingCcipExtraArgs;
+        emit RoutingExtraArgsChanged(routingCcipExtraArgs);
     }
 
     /// @inheritdoc IChainPortal
@@ -129,7 +138,24 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         uint64[] memory routeChainSelectors,
         address[] memory routePortals
     ) external onlyPortalController {
-        _setRoutes(destChainSelectors, routeChainSelectors, routePortals);
+        uint256 destChainSelectorsLength = destChainSelectors.length;
+        if (destChainSelectorsLength != routeChainSelectors.length || destChainSelectorsLength != routePortals.length) {
+            revert ChainPortal__InconsistentParamsLength();
+        }
+        address routePortal;
+        uint64 routeChainSelector;
+        for (uint256 i; i < destChainSelectorsLength;) {
+            routePortal = routePortals[i];
+            routeChainSelector = routeChainSelectors[i];
+            if (routePortal != address(0) && !IRouterClient(i_ccipRouter).isChainSupported(routeChainSelector)) {
+                revert ChainPortal__UnsupportedRoute(routeChainSelector);
+            }
+            s_routes[destChainSelectors[i]] = Portal.Route({portal: routePortal, chainSelector: routeChainSelector});
+            unchecked {
+                ++i;
+            }
+        }
+        emit RoutesChanged(destChainSelectors, routeChainSelectors, routePortals);
     }
 
     /// @inheritdoc IChainPortal
@@ -138,7 +164,32 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
         uint64[] calldata srcChainSelectors,
         bool[] calldata authorizeds
     ) external onlyPortalController {
-        _setActionsOrigins(origins, srcChainSelectors, authorizeds);
+        uint256 originsLength = origins.length;
+        if (originsLength != srcChainSelectors.length || originsLength != authorizeds.length) {
+            revert ChainPortal__InconsistentParamsLength();
+        }
+        for (uint256 i; i < originsLength;) {
+            s_authorizedActionOrigins[origins[i]][srcChainSelectors[i]] = authorizeds[i];
+            unchecked {
+                ++i;
+            }
+        }
+        emit ActionOriginsChanged(origins, srcChainSelectors, authorizeds);
+    }
+
+    /// @inheritdoc IChainPortal
+    function transferTokens(address to, address[] memory tokens, uint256[] memory amounts)
+        external
+        onlyPortalController
+    {
+        uint256 tokensLen = tokens.length;
+        if (tokensLen != amounts.length) revert ChainPortal__InconsistentParamsLength();
+        for (uint256 i; i < tokensLen;) {
+            IERC20(tokens[i]).safeTransfer(to, amounts[i]);
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /// @inheritdoc IChainPortal
@@ -176,7 +227,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
             extraArgs: route.chainSelector == destChainSelector ? ccipExtraArgs : s_routingCcipExtraArgs,
             feeToken: i_linkToken
         });
-        bytes32 messageId = IRouterClient(i_router).ccipSend(route.chainSelector, message);
+        bytes32 messageId = IRouterClient(i_ccipRouter).ccipSend(route.chainSelector, message);
         emit ActionSetSent(messageId);
     }
 
@@ -198,9 +249,9 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     ////////////////////////
 
     /**
-     * @param message The Any2EVMMessage struct received from CCIP, containing an action set to be executed or routed to another portals.
      * @dev This function is used by Chainlink CCIP router to deliver a message.
      * @dev If the destination of the action set is not this chain it will be forwarded to the next portal in the route if any.
+     * @param message The Any2EVMMessage struct received from CCIP, containing an action set to be executed or routed to another portals.
      */
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
         Portal.Route memory routeIn = s_routes[message.sourceChainSelector];
@@ -218,13 +269,13 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     }
 
     /**
+     * @dev This function is used to manage incoming action sets to be executed from this portal.
+     * @dev If the origin of the action set is not authorized the action set will be discarded.
+     * @dev If the origin of the action set is authorized and the targets are not empty the action set will be queued for execution.
      * @param actionSet Inbound action set.
      * @param sender Sender of the action set.
      * @param srcChainSelector Source chain selector of the action set.
      * @param messageId ID of the CCIP message where the action set has been stored.
-     * @dev This function is used to manage incoming action sets to be executed from this portal.
-     * @dev If the origin of the action set is not authorized the action set will be discarded.
-     * @dev If the origin of the action set is authorized and the targets are not empty the action set will be queued for execution.
      */
     function _handleInboundActionSet(
         Portal.ActionSet memory actionSet,
@@ -251,9 +302,9 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     }
 
     /**
+     * @dev Transfer tokens from msg.sender to this portal and approve tokens to CCIP router.
      * @param tokens Array of tokens to be bridged.
      * @param amounts Array of token amounts to be bridged.
-     * @notice Transfer tokens from msg.sender to this portal and approve tokens to CCIP router.
      */
     function _handleBridgeTokens(address[] memory tokens, uint256[] memory amounts)
         private
@@ -270,7 +321,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
             tokensData[i].token = tokens[i];
             tokensData[i].amount = tokenAmount;
             if (notSelf) token.safeTransferFrom(msg.sender, address(this), tokenAmount);
-            token.approve(i_router, tokenAmount);
+            token.forceApprove(i_ccipRouter, tokenAmount);
             unchecked {
                 ++i;
             }
@@ -279,10 +330,10 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     }
 
     /**
+     * @dev This function forward the inbound action set and tokens to the next portal in the route to reach the destination chain.
      * @param msg2Forward The CCIP message containing the action set and data of tokens to be forwarded.
      * @param destChainSelector The destination chain selector of the message to forward.
      * @param ccipExtraArgs Gas limit and strict sequencing extra args for CCIP.
-     * @dev This function forward the inbound action set and tokens to the next portal in the route to reach the destination chain.
      */
     function _forwardDataAndTokens(
         Client.Any2EVMMessage memory msg2Forward,
@@ -297,7 +348,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
             Client.EVMTokenAmount memory tokenData;
             for (uint256 i; i < msg2Forward.destTokenAmounts.length;) {
                 tokenData = msg2Forward.destTokenAmounts[i];
-                IERC20(tokenData.token).approve(i_router, tokenData.amount);
+                IERC20(tokenData.token).forceApprove(i_ccipRouter, tokenData.amount);
                 unchecked {
                     ++i;
                 }
@@ -309,7 +360,7 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
                 extraArgs: route.chainSelector == destChainSelector ? ccipExtraArgs : s_routingCcipExtraArgs,
                 feeToken: address(i_linkToken)
             });
-            bytes32 messageId = IRouterClient(i_router).ccipSend(route.chainSelector, forwardedMsg);
+            bytes32 messageId = IRouterClient(i_ccipRouter).ccipSend(route.chainSelector, forwardedMsg);
             emit ActionSetForwarded(msg2Forward.messageId, messageId);
         }
     }
@@ -360,12 +411,8 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
             }
             actionInfo = s_actionInfos[nextActionId];
         }
-        if (actionInfo.actionState == Portal.ActionState.EMPTY) {
-            revert ChainPortal__NoActionSetQueued();
-        }
-        if (block.timestamp < actionInfo.executionScheduledAt) {
-            revert ChainPortal__ActionSetNotExecutable();
-        }
+        if (actionInfo.actionState == Portal.ActionState.EMPTY) revert ChainPortal__NoActionSetQueued();
+        if (block.timestamp < actionInfo.executionScheduledAt) revert ChainPortal__ActionSetNotExecutable();
         actionInfo.actionState = Portal.ActionState.EXECUTED;
         s_portalState.nextActionId = nextActionId + 1;
         _executeActionSet(nextActionId);
@@ -375,82 +422,6 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     function _setExecutionDelay(uint32 executionDelay) internal {
         s_portalState.executionDelay = executionDelay;
         emit ExecutionDelayChanged(executionDelay);
-    }
-
-    /// @param routingCcipExtraArgs The new extra args for CCIP to be used for multi-hop routing (message forwaded to the next portal on the route).
-    function _setRoutingCcipExtraArgs(bytes memory routingCcipExtraArgs) internal {
-        s_routingCcipExtraArgs = routingCcipExtraArgs;
-        emit RoutingExtraArgsChanged(routingCcipExtraArgs);
-    }
-
-    /// @param actionId The ID of the action to be aborted.
-    function _abortAction(uint64 actionId) internal {
-        Portal.State memory portalState = s_portalState;
-        if (actionId < portalState.nextActionId || actionId >= portalState.lastActionId) {
-            revert ChainPortal__InvalidActionSetId(actionId);
-        }
-        Portal.ActionSetInfo storage actionInfo = s_actionInfos[actionId];
-        if (actionInfo.actionState != Portal.ActionState.PENDING) {
-            revert ChainPortal__ActionSetNotPending(actionId);
-        }
-        actionInfo.actionState = Portal.ActionState.ABORTED;
-        emit ActionSetAborted(actionId);
-    }
-
-    /**
-     * @param destChainSelectors Array of destination chain selectors.
-     * @param routeChainSelectors Array of route chain selectors.
-     * @param routePortals Array of route portals.
-     */
-    function _setRoutes(
-        uint64[] memory destChainSelectors,
-        uint64[] memory routeChainSelectors,
-        address[] memory routePortals
-    ) internal {
-        uint256 destChainSelectorsLength = destChainSelectors.length;
-        if (destChainSelectorsLength != routeChainSelectors.length || destChainSelectorsLength != routePortals.length) {
-            revert ChainPortal__InconsistentParamsLength();
-        }
-        address routePortal;
-        uint64 routeChainSelector;
-        for (uint256 i; i < destChainSelectorsLength;) {
-            routePortal = routePortals[i];
-            routeChainSelector = routeChainSelectors[i];
-            if (routePortal != address(0)) {
-                if (!IRouterClient(i_router).isChainSupported(routeChainSelector)) {
-                    revert ChainPortal__UnsupportedRoute(routeChainSelector);
-                }
-            }
-            s_routes[destChainSelectors[i]] = Portal.Route({portal: routePortal, chainSelector: routeChainSelector});
-            unchecked {
-                ++i;
-            }
-        }
-        emit RoutesChanged(destChainSelectors, routeChainSelectors, routePortals);
-    }
-
-    /**
-     * @param origins Array of addresses to authorize (or revoke authorization).
-     * @param srcChainSelectors Array of source chain selectors.
-     * @param authorizeds Array of authorization boolean values.
-     * @notice This function is used to whitelist actions origins (address of the sender and source chain selector).
-     */
-    function _setActionsOrigins(
-        address[] calldata origins,
-        uint64[] calldata srcChainSelectors,
-        bool[] calldata authorizeds
-    ) internal {
-        uint256 originsLength = origins.length;
-        if (originsLength != srcChainSelectors.length || originsLength != authorizeds.length) {
-            revert ChainPortal__InconsistentParamsLength();
-        }
-        for (uint256 i; i < originsLength;) {
-            s_authorizedActionOrigins[origins[i]][srcChainSelectors[i]] = authorizeds[i];
-            unchecked {
-                ++i;
-            }
-        }
-        emit ActionOriginsChanged(origins, srcChainSelectors, authorizeds);
     }
 
     /////////////////////////////
@@ -488,6 +459,14 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     /////////////////////////////
     // External View Functions //
     /////////////////////////////
+
+    /**
+     * @inheritdoc AutomationCompatibleInterface
+     * @dev This contract integrates with Chainlink Automation implementing the AutomationCompatibleInterface.
+     */
+    function checkUpkeep(bytes calldata) external view override returns (bool, bytes memory) {
+        return (s_actionInfos[s_portalState.nextActionId].executionScheduledAt <= block.timestamp, new bytes(0));
+    }
 
     /// @inheritdoc IChainPortal
     function getPortalState()
@@ -535,13 +514,5 @@ abstract contract ChainPortal is IChainPortal, CCIPReceiver, AutomationCompatibl
     function getRoute(uint64 destChainSelector) external view returns (uint64 routeChainSelector, address portal) {
         Portal.Route memory route = s_routes[destChainSelector];
         return (route.chainSelector, route.portal);
-    }
-
-    /**
-     * @inheritdoc AutomationCompatibleInterface
-     * @dev This contract integrates with Chainlink Automation implementing the AutomationCompatibleInterface.
-     */
-    function checkUpkeep(bytes calldata) external view override returns (bool, bytes memory) {
-        return (s_actionInfos[s_portalState.nextActionId].executionScheduledAt <= block.timestamp, new bytes(0));
     }
 }

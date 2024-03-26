@@ -1,6 +1,6 @@
 {
   "name": "flashliquidity-portals",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "license": "MIT",
   "repository": "https://github.com/flashliquidity/flashliquidity-portals.git",
   "scripts": {
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@chainlink/contracts": "^0.8.0",
-    "@chainlink/contracts-ccip": "^0.7.6",
+    "@chainlink/contracts-ccip": "^1.4.0",
     "@openzeppelin/contracts": "4.9.3",
     "flashliquidity-acs": "0.0.7"
   },

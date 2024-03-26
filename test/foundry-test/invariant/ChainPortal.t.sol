@@ -32,22 +32,13 @@ contract ChainPortalTest is Test {
 
     function setUp() public {
         vm.prank(governor);
-        linkToken = new ERC20Mock("LINK","LINK", 1000000);
+        linkToken = new ERC20Mock("LINK", "LINK", 1000000);
         uint64[] memory supportedChains = new uint64[](2);
         supportedChains[0] = governorChainSelector;
         supportedChains[1] = crossChainSelector;
-        ccipRouter = new CcipRouterMock(
-            address(linkToken),
-            uint64(block.chainid),
-            supportedChains
-        );
+        ccipRouter = new CcipRouterMock(address(linkToken), uint64(block.chainid), supportedChains);
         governorPortal = new GovernorPortal(
-            governor,
-            guardian,
-            address(ccipRouter),
-            address(linkToken),
-            governorChainSelector,
-            executionDelay
+            governor, guardian, address(ccipRouter), address(linkToken), governorChainSelector, executionDelay
         );
     }
 

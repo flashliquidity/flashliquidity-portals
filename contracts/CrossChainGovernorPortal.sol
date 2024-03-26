@@ -15,7 +15,6 @@ import {Portal, ChainPortal} from "./ChainPortal.sol";
  * @notice Governor can extend governance to cross-chain contracts indirectly by interacting with cross-chain portals from governor portal.
  * @notice The role of owner/governor for the contracts that require cross-chain governance should be granted to this portal.
  */
-
 contract CrossChainGovernorPortal is CrossChainGovernable, Guardable, ChainPortal {
     error CrossChainGovernorPortal__CommunicationNotLost();
 
@@ -50,8 +49,8 @@ contract CrossChainGovernorPortal is CrossChainGovernable, Guardable, ChainPorta
     }
 
     /**
-     * @param intervalCommunicationLost The time interval between the last timestamp an action has been received and the timestamp of the current block.
      * @dev When this interval is exceeded the communication with the base portal is considered lost.
+     * @param intervalCommunicationLost The time interval between the last timestamp an action has been received and the timestamp of the current block.
      */
     function setIntervalCommunicationLost(uint32 intervalCommunicationLost) external onlyPortalController {
         s_intervalCommunicationLost = intervalCommunicationLost;
@@ -82,8 +81,8 @@ contract CrossChainGovernorPortal is CrossChainGovernable, Guardable, ChainPorta
     }
 
     /**
-     * @param actionSet The action set struct containing the emergency instructions to be executed.
      * @dev This function can be executed only by guardians and only if communication with the base portal has been lost.
+     * @param actionSet The action set struct containing the emergency instructions to be executed.
      */
     function emergencyCommunicationLost(Portal.ActionSet memory actionSet) external onlyGuardian onlyNotCursed {
         if (!_isCommunicationLost()) revert CrossChainGovernorPortal__CommunicationNotLost();
